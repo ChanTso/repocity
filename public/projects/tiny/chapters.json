@@ -1,0 +1,29 @@
+[
+  {
+    "id": "chapter-001",
+    "title": "Release v0.1.0",
+    "summary": "2 commits · 3 entity changes",
+    "startCommitIndex": 0,
+    "endCommitIndex": 1,
+    "commitIndices": [
+      0,
+      1
+    ],
+    "mode": "rules",
+    "disclaimer": "Rule-based grouping for presentation; it does not claim the developers’ original intent."
+  },
+  {
+    "id": "chapter-002",
+    "title": "Release v0.2.0",
+    "summary": "3 commits · 7 entity changes",
+    "startCommitIndex": 2,
+    "endCommitIndex": 4,
+    "commitIndices": [
+      2,
+      3,
+      4
+    ],
+    "mode": "rules",
+    "disclaimer": "Rule-based grouping for presentation; it does not claim the developers’ original intent."
+  }
+]

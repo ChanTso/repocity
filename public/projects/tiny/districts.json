@@ -1,0 +1,49 @@
+[
+  {
+    "id": "src-core",
+    "name": "Src Core",
+    "entityIds": [
+      "ent_01f5f713c83f784acb88",
+      "ent_5dc3cbcc81638558c053"
+    ],
+    "weight": 5,
+    "color": "#e39b46",
+    "layout": {
+      "x": -14.222222222222221,
+      "z": 3.999999999999993,
+      "width": 78.22222222222221,
+      "depth": 40.00000000000001
+    }
+  },
+  {
+    "id": "tests",
+    "name": "Test Labs",
+    "entityIds": [
+      "ent_a79883761cf4977a52fb"
+    ],
+    "weight": 7,
+    "color": "#3fb7a3",
+    "layout": {
+      "x": -64,
+      "z": -44,
+      "width": 49.77777777777778,
+      "depth": 88
+    }
+  },
+  {
+    "id": "core",
+    "name": "Core",
+    "entityIds": [
+      "ent_6e47f62f0cfe5001a293",
+      "ent_2e2c04648a54a1881427"
+    ],
+    "weight": 6,
+    "color": "#b06fd3",
+    "layout": {
+      "x": -14.222222222222221,
+      "z": -44,
+      "width": 78.22222222222223,
+      "depth": 47.99999999999999
+    }
+  }
+]

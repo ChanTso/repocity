@@ -1,0 +1,28 @@
+{
+  "commitIndex": 0,
+  "entities": {
+    "ent_01f5f713c83f784acb88": {
+      "entityId": "ent_01f5f713c83f784acb88",
+      "path": "src/core/math.ts",
+      "metrics": {
+        "loc": 2,
+        "exports": 2,
+        "fanIn": 1,
+        "fanOut": 0
+      }
+    },
+    "ent_2e2c04648a54a1881427": {
+      "entityId": "ent_2e2c04648a54a1881427",
+      "path": "src/index.ts",
+      "metrics": {
+        "loc": 4,
+        "exports": 1,
+        "fanIn": 0,
+        "fanOut": 1
+      }
+    }
+  },
+  "relationIds": [
+    "rel_53ec66375eaf4f7478d6"
+  ]
+}

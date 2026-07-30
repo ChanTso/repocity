@@ -1,0 +1,29 @@
+{
+  "name": "@repocity/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "repocity": "./bin/repocity.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "tsx src/cli.ts",
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@repocity/city-compiler": "*",
+    "@repocity/git-analyzer": "*",
+    "@repocity/replay-engine": "*",
+    "@repocity/schema": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

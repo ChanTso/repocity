@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "types": ["node"],
+    "incremental": false,
+    "noEmit": true,
+    "paths": {
+      "@repocity/schema": ["../../packages/schema/src/index.ts"],
+      "@repocity/city-compiler": ["../../packages/city-compiler/src/index.ts"],
+      "@repocity/replay-engine": ["../../packages/replay-engine/src/index.ts"],
+      "@repocity/git-analyzer": ["../../packages/git-analyzer/src/index.ts"],
+      "@repocity/code-analyzer": ["../../packages/code-analyzer/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,147 @@
+[
+  {
+    "id": "ent_01f5f713c83f784acb88",
+    "kind": "building",
+    "path": "src/core/arithmetic.ts",
+    "aliases": [
+      "src/core/math.ts"
+    ],
+    "name": "arithmetic.ts",
+    "extension": ".ts",
+    "language": "typescript",
+    "role": "source",
+    "districtId": "src-core",
+    "bornAt": 0,
+    "maxMetrics": {
+      "loc": 2,
+      "exports": 2,
+      "fanIn": 3,
+      "fanOut": 0,
+      "churn": 3
+    },
+    "layout": {
+      "x": -0.25185185185185155,
+      "z": 24,
+      "width": 16.061195870845072,
+      "depth": 22.753981712736365,
+      "maxHeight": 16.708020839342968,
+      "rotationY": 4.71238898038469,
+      "styleVariant": 2
+    }
+  },
+  {
+    "id": "ent_5dc3cbcc81638558c053",
+    "kind": "building",
+    "path": "src/core/format.ts",
+    "aliases": [],
+    "name": "format.ts",
+    "extension": ".ts",
+    "language": "typescript",
+    "role": "source",
+    "districtId": "src-core",
+    "bornAt": 3,
+    "maxMetrics": {
+      "loc": 3,
+      "exports": 1,
+      "fanIn": 1,
+      "fanOut": 0,
+      "churn": 3
+    },
+    "layout": {
+      "x": 24.888888888888886,
+      "z": 24,
+      "width": 16.624733827160494,
+      "depth": 24.869440000000008,
+      "maxHeight": 20.166666666666668,
+      "rotationY": 3.141592653589793,
+      "styleVariant": 5
+    }
+  },
+  {
+    "id": "ent_a79883761cf4977a52fb",
+    "kind": "building",
+    "path": "tests/arithmetic.test.ts",
+    "aliases": [
+      "tests/math.test.ts"
+    ],
+    "name": "arithmetic.test.ts",
+    "extension": ".ts",
+    "language": "typescript",
+    "role": "test",
+    "districtId": "tests",
+    "bornAt": 1,
+    "maxMetrics": {
+      "loc": 7,
+      "exports": 0,
+      "fanIn": 0,
+      "fanOut": 1,
+      "churn": 13
+    },
+    "layout": {
+      "x": -39.111111111111114,
+      "z": 0,
+      "width": 39.46133333333334,
+      "depth": 62.97984000000001,
+      "maxHeight": 28.5,
+      "rotationY": 1.5707963267948966,
+      "styleVariant": 4
+    }
+  },
+  {
+    "id": "ent_6e47f62f0cfe5001a293",
+    "kind": "building",
+    "path": "src/legacy.ts",
+    "aliases": [],
+    "name": "legacy.ts",
+    "extension": ".ts",
+    "language": "typescript",
+    "role": "source",
+    "districtId": "core",
+    "bornAt": 3,
+    "diedAt": 4,
+    "maxMetrics": {
+      "loc": 1,
+      "exports": 1,
+      "fanIn": 0,
+      "fanOut": 1,
+      "churn": 2
+    },
+    "layout": {
+      "x": 6.033333333333337,
+      "z": -20.000000000000004,
+      "width": 22.666891851851858,
+      "depth": 26.059306666666664,
+      "maxHeight": 11.833333333333334,
+      "rotationY": 3.141592653589793,
+      "styleVariant": 1
+    }
+  },
+  {
+    "id": "ent_2e2c04648a54a1881427",
+    "kind": "building",
+    "path": "src/index.ts",
+    "aliases": [],
+    "name": "index.ts",
+    "extension": ".ts",
+    "language": "typescript",
+    "role": "source",
+    "districtId": "core",
+    "bornAt": 0,
+    "maxMetrics": {
+      "loc": 5,
+      "exports": 1,
+      "fanIn": 0,
+      "fanOut": 2,
+      "churn": 12
+    },
+    "layout": {
+      "x": 43.744444444444454,
+      "z": -20.000000000000004,
+      "width": 27.810249238588646,
+      "depth": 35.12506321228702,
+      "maxHeight": 25.041354172676304,
+      "rotationY": 4.71238898038469,
+      "styleVariant": 2
+    }
+  }
+]

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "0.1",
+  "projectId": "repocity-tiny-af734b80bbdb12bd",
+  "repo": {
+    "name": "repocity-tiny",
+    "defaultBranch": "main",
+    "headSha": "6e99eb4f0b1e0e9ce6eda641362b6b39025222d1"
+  },
+  "stats": {
+    "entityCount": 5,
+    "districtCount": 3,
+    "commitCount": 5,
+    "displayedCommitCount": 5
+  },
+  "files": {
+    "districts": "districts.json",
+    "entities": "entities.json",
+    "relations": "relations.json",
+    "commits": "commits.json",
+    "chapters": "chapters.json",
+    "deltas": "deltas.ndjson",
+    "keyframesDir": "keyframes"
+  }
+}

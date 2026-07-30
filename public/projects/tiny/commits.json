@@ -1,0 +1,84 @@
+[
+  {
+    "index": 0,
+    "sha": "2b967aaa58b1866ba9be6987dad3b42830759b5f",
+    "parents": [],
+    "authorName": "RepoCity Fixture",
+    "authoredAt": "2025-01-01T09:00:00Z",
+    "message": "feat: plant the city foundations",
+    "tags": [],
+    "changedEntityIds": [
+      "ent_01f5f713c83f784acb88",
+      "ent_2e2c04648a54a1881427"
+    ],
+    "chapterId": "chapter-001"
+  },
+  {
+    "index": 1,
+    "sha": "c4038f06ad5483778d2310b161128b76a1f97157",
+    "parents": [
+      "2b967aaa58b1866ba9be6987dad3b42830759b5f"
+    ],
+    "authorName": "RepoCity Fixture",
+    "authoredAt": "2025-01-02T09:00:00Z",
+    "message": "test: inspect the arithmetic district",
+    "tags": [
+      "v0.1.0"
+    ],
+    "changedEntityIds": [
+      "ent_a79883761cf4977a52fb"
+    ],
+    "chapterId": "chapter-001"
+  },
+  {
+    "index": 2,
+    "sha": "47ab7ddebadfb0150d4f8842757f66faea78c4df",
+    "parents": [
+      "c4038f06ad5483778d2310b161128b76a1f97157"
+    ],
+    "authorName": "RepoCity Fixture",
+    "authoredAt": "2025-01-03T09:00:00Z",
+    "message": "refactor: rename math to arithmetic",
+    "tags": [],
+    "changedEntityIds": [
+      "ent_01f5f713c83f784acb88",
+      "ent_2e2c04648a54a1881427",
+      "ent_a79883761cf4977a52fb"
+    ],
+    "chapterId": "chapter-002"
+  },
+  {
+    "index": 3,
+    "sha": "9986d50df91ca5f6a46b8c31fd830ad0f5329939",
+    "parents": [
+      "47ab7ddebadfb0150d4f8842757f66faea78c4df"
+    ],
+    "authorName": "RepoCity Fixture",
+    "authoredAt": "2025-01-04T09:00:00Z",
+    "message": "feat: add formatting and a temporary legacy bridge",
+    "tags": [],
+    "changedEntityIds": [
+      "ent_2e2c04648a54a1881427",
+      "ent_5dc3cbcc81638558c053",
+      "ent_6e47f62f0cfe5001a293"
+    ],
+    "chapterId": "chapter-002"
+  },
+  {
+    "index": 4,
+    "sha": "6e99eb4f0b1e0e9ce6eda641362b6b39025222d1",
+    "parents": [
+      "9986d50df91ca5f6a46b8c31fd830ad0f5329939"
+    ],
+    "authorName": "RepoCity Fixture",
+    "authoredAt": "2025-01-05T09:00:00Z",
+    "message": "chore: demolish the legacy bridge",
+    "tags": [
+      "v0.2.0"
+    ],
+    "changedEntityIds": [
+      "ent_6e47f62f0cfe5001a293"
+    ],
+    "chapterId": "chapter-002"
+  }
+]

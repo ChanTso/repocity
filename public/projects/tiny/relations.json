@@ -1,0 +1,35 @@
+[
+  {
+    "id": "rel_07f4ae0db19ab19c7fb6",
+    "sourceId": "ent_6e47f62f0cfe5001a293",
+    "targetId": "ent_01f5f713c83f784acb88",
+    "kind": "import",
+    "bornAt": 3,
+    "diedAt": 4,
+    "weight": 1
+  },
+  {
+    "id": "rel_4acec92960ec12b8b80f",
+    "sourceId": "ent_a79883761cf4977a52fb",
+    "targetId": "ent_01f5f713c83f784acb88",
+    "kind": "import",
+    "bornAt": 1,
+    "weight": 1
+  },
+  {
+    "id": "rel_53ec66375eaf4f7478d6",
+    "sourceId": "ent_2e2c04648a54a1881427",
+    "targetId": "ent_01f5f713c83f784acb88",
+    "kind": "import",
+    "bornAt": 0,
+    "weight": 1
+  },
+  {
+    "id": "rel_5707138dcbb863c5746e",
+    "sourceId": "ent_2e2c04648a54a1881427",
+    "targetId": "ent_5dc3cbcc81638558c053",
+    "kind": "import",
+    "bornAt": 3,
+    "weight": 1
+  }
+]
