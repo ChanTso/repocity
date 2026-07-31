@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type {
@@ -12,9 +12,10 @@ import type {
   SemanticWaterBoundary,
 } from "@/app/lib/semantic-city";
 import type {
-  UrbanBuildingEnvelope,
+  UrbanArchitecturalEnvelope,
   UrbanFabricPlan,
   UrbanMaterialKey,
+  UrbanStorefront,
 } from "@/app/lib/urban-fabric";
 import { stableCityHash } from "@/app/lib/city-visuals";
 import { getTimeOfDayPalette } from "./living-city-render-utils";
@@ -208,11 +209,24 @@ export function SemanticMetropolis({
       ),
     [displayBounds, plan.terrain.waterBoundaries],
   );
+  const terrainBounds = useMemo(() => {
+    const padding = urbanFabric ? 86 : 0;
+    return {
+      ...displayBounds,
+      minX: displayBounds.minX - padding,
+      maxX: displayBounds.maxX + padding,
+      minZ: displayBounds.minZ - padding,
+      maxZ: displayBounds.maxZ + padding,
+      width: displayBounds.width + padding * 2,
+      depth: displayBounds.depth + padding * 2,
+    };
+  }, [displayBounds, urbanFabric]);
 
   return (
     <group name="semantic-metropolis">
+      <RenderDiagnostics urbanFabric={urbanFabric} />
       <SemanticTerrain
-        bounds={displayBounds}
+        bounds={terrainBounds}
         waterBoundaries={displayWaterBoundaries}
       />
       <SemanticWater
@@ -289,6 +303,8 @@ export function SemanticMetropolis({
         boxes={campusGeometry.shells}
         castShadow
         color="#ffffff"
+        emissive="#5b4938"
+        emissiveIntensity={palette.night * 0.16}
         material="standard"
         receiveShadow
         roughness={0.78}
@@ -297,6 +313,8 @@ export function SemanticMetropolis({
         boxes={campusGeometry.wings}
         castShadow
         color="#ffffff"
+        emissive="#584637"
+        emissiveIntensity={palette.night * 0.14}
         material="standard"
         receiveShadow
         roughness={0.8}
@@ -312,8 +330,8 @@ export function SemanticMetropolis({
       <StaticBoxInstances
         boxes={campusGeometry.glazing}
         color="#ffffff"
-        emissive="#254f55"
-        emissiveIntensity={0.035 + palette.night * 0.72}
+        emissive="#d29d55"
+        emissiveIntensity={0.025 + palette.night * 0.62}
         material="standard"
         roughness={0.28}
       />
@@ -349,7 +367,7 @@ export function SemanticMetropolis({
 
       {urbanFabric ? (
         <UrbanBuildingHitTargets
-          buildings={urbanFabric.buildings}
+          plan={urbanFabric}
           onHoverEntity={onHoverEntity}
           onSelectEntity={onSelectEntity}
           reservedEntityIds={reservedEntityIds}
@@ -397,6 +415,56 @@ export function SemanticMetropolis({
       />
     </group>
   );
+}
+
+function RenderDiagnostics({
+  urbanFabric,
+}: {
+  urbanFabric?: UrbanFabricPlan;
+}) {
+  const renderer = useThree((state) => state.gl);
+  const smoothedFrameMs = useRef(16.7);
+  useLayoutEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const target = window as Window & {
+      __REPOCITY_RENDER_METRICS__?: Record<string, unknown>;
+    };
+    target.__REPOCITY_RENDER_METRICS__ = {
+      drawCalls: 0,
+      triangles: 0,
+      lines: 0,
+      points: 0,
+      programs: renderer.info.programs?.length ?? 0,
+      frameMs: smoothedFrameMs.current,
+      architecturalEnvelopes:
+        urbanFabric?.morphology.architecturalEnvelopeCount ?? 0,
+      massingVolumes: urbanFabric?.morphology.massingVolumeCount ?? 0,
+      storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
+      facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
+    };
+  }, [renderer, urbanFabric]);
+  useFrame((_state, delta) => {
+    if (process.env.NODE_ENV !== "development") return;
+    smoothedFrameMs.current =
+      smoothedFrameMs.current * 0.92 + delta * 1_000 * 0.08;
+    const target = window as Window & {
+      __REPOCITY_RENDER_METRICS__?: Record<string, unknown>;
+    };
+    target.__REPOCITY_RENDER_METRICS__ = {
+      drawCalls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      lines: renderer.info.render.lines,
+      points: renderer.info.render.points,
+      programs: renderer.info.programs?.length ?? 0,
+      frameMs: Number(smoothedFrameMs.current.toFixed(2)),
+      architecturalEnvelopes:
+        urbanFabric?.morphology.architecturalEnvelopeCount ?? 0,
+      massingVolumes: urbanFabric?.morphology.massingVolumeCount ?? 0,
+      storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
+      facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
+    };
+  });
+  return null;
 }
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
@@ -602,8 +670,8 @@ function makeTerrainGeometry(
 
   const positions = geometry.getAttribute("position");
   const colors = new Float32Array(positions.count * 3);
-  const cityColor = new THREE.Color("#688d62");
-  const outerColor = new THREE.Color("#4f735b");
+  const cityColor = new THREE.Color("#747d6b");
+  const outerColor = new THREE.Color("#53684f");
   const color = new THREE.Color();
   const gradientDistance = Math.max(4, Math.max(bounds.width, bounds.depth) * 0.12);
   for (let index = 0; index < positions.count; index += 1) {
@@ -896,6 +964,11 @@ const URBAN_MATERIAL_COLORS: Readonly<Record<UrbanMaterialKey, string>> = {
   "warm-concrete": "#aaa59a",
   brick: "#947d70",
   slate: "#727b7d",
+  "red-brick": "#8a493c",
+  "cream-terra-cotta": "#c8ab7e",
+  "dark-metal": "#263337",
+  "blue-green-glass": "#6b9294",
+  "bronze-metal": "#765d43",
 };
 
 function emptyCampusGeometry(): CampusGeometry {
@@ -913,227 +986,296 @@ function emptyCampusGeometry(): CampusGeometry {
   };
 }
 
-function urbanMass(
+function addFacadePanel(
   target: BoxInstance[],
-  building: UrbanBuildingEnvelope,
-  options: {
-    x?: number;
-    y: number;
-    z?: number;
-    width: number;
-    height: number;
-    depth: number;
-    color?: string;
-    rotationZ?: number;
-  },
+  envelope: UrbanArchitecturalEnvelope,
+  edge: "north" | "east" | "south" | "west",
+  offset: number,
+  y: number,
+  width: number,
+  height: number,
+  depth: number,
+  color: string,
 ) {
+  const northSouth = edge === "north" || edge === "south";
   target.push({
-    x: building.x + (options.x ?? 0),
-    y: CAMPUS_BASE_Y + options.y,
-    z: building.z + (options.z ?? 0),
-    width: options.width,
-    height: options.height,
-    depth: options.depth,
-    rotationY: building.rotation,
-    rotationZ: options.rotationZ,
-    color: options.color,
-  });
-}
-
-function addUrbanFacadeRhythm(
-  geometry: CampusGeometry,
-  building: UrbanBuildingEnvelope,
-  facadeHeight: number,
-) {
-  const floors = Math.max(2, Math.min(7, Math.floor(facadeHeight / 1.65)));
-  const north = building.entrance.z <= building.z;
-  const facadeZ =
-    (north ? -1 : 1) * (building.depth / 2 + 0.025);
-  for (let floor = 0; floor < floors; floor += 1) {
-    urbanMass(geometry.glazing, building, {
-      y: 1.05 + floor * Math.max(1.15, (facadeHeight - 1.1) / floors),
-      z: facadeZ,
-      width: building.width * 0.72,
-      height: 0.34,
-      depth: 0.06,
-      color: floor % 3 === 0 ? "#7ba2a5" : "#668b90",
-    });
-  }
-  urbanMass(geometry.accents, building, {
-    y: 0.53,
-    z: (north ? -1 : 1) * (building.depth / 2 + 0.2),
-    width: Math.min(1.5, building.width * 0.34),
-    height: 0.16,
-    depth: 0.52,
-    color: building.accentColor,
-  });
-  urbanMass(geometry.details, building, {
-    y: 0.34,
-    z: (north ? -1 : 1) * (building.depth / 2 + 0.23),
-    width: Math.min(0.9, building.width * 0.22),
-    height: 0.52,
-    depth: 0.08,
-    color: "#263638",
-  });
-}
-
-function buildNarrowStreetBuilding(
-  geometry: CampusGeometry,
-  building: UrbanBuildingEnvelope,
-  wall: string,
-) {
-  urbanMass(geometry.shells, building, {
-    y: building.height / 2,
-    width: building.width,
-    height: building.height,
-    depth: building.depth,
-    color: wall,
-  });
-  urbanMass(geometry.roofs, building, {
-    y: building.height + 0.14,
-    width: building.width * 0.96,
-    height: 0.28,
-    depth: building.depth * 0.96,
-    color: "#4f595a",
-  });
-  addUrbanFacadeRhythm(geometry, building, building.height);
-}
-
-function buildPerimeterCourtyard(
-  geometry: CampusGeometry,
-  building: UrbanBuildingEnvelope,
-  wall: string,
-) {
-  const height = building.height * 0.72;
-  const wingDepth = Math.max(0.75, building.depth * 0.18);
-  const wingWidth = Math.max(0.8, building.width * 0.17);
-  for (const side of [-1, 1]) {
-    urbanMass(geometry.wings, building, {
-      y: height / 2,
-      z: side * (building.depth / 2 - wingDepth / 2),
-      width: building.width,
-      height,
-      depth: wingDepth,
-      color: wall,
-    });
-    urbanMass(geometry.wings, building, {
-      x: side * (building.width / 2 - wingWidth / 2),
-      y: height / 2,
-      width: wingWidth,
-      height,
-      depth: Math.max(0.8, building.depth - wingDepth * 1.4),
-      color: wall,
-    });
-  }
-  urbanMass(geometry.lawns, building, {
-    y: 0.07,
-    width: Math.max(0.8, building.width - wingWidth * 2.3),
-    height: 0.08,
-    depth: Math.max(0.8, building.depth - wingDepth * 2.3),
-    color: "#547759",
-  });
-  addUrbanFacadeRhythm(geometry, building, height);
-}
-
-function buildPodiumTower(
-  geometry: CampusGeometry,
-  building: UrbanBuildingEnvelope,
-  wall: string,
-) {
-  const podiumHeight = Math.max(2.2, building.height * 0.28);
-  const towerHeight = building.height - podiumHeight * 0.55;
-  urbanMass(geometry.wings, building, {
-    y: podiumHeight / 2,
-    width: building.width,
-    height: podiumHeight,
-    depth: building.depth,
-    color: wall,
-  });
-  urbanMass(geometry.shells, building, {
-    x: building.width * 0.12,
-    y: podiumHeight * 0.55 + towerHeight / 2,
-    z: building.depth * 0.06,
-    width: building.width * 0.5,
-    height: towerHeight,
-    depth: building.depth * 0.6,
-    color: wall,
-  });
-  urbanMass(geometry.roofs, building, {
-    x: building.width * 0.12,
-    y: building.height + 0.18,
-    z: building.depth * 0.06,
-    width: building.width * 0.46,
-    height: 0.32,
-    depth: building.depth * 0.56,
-    color: "#465155",
-  });
-  addUrbanFacadeRhythm(geometry, building, building.height);
-}
-
-function buildCivicLandmark(
-  geometry: CampusGeometry,
-  building: UrbanBuildingEnvelope,
-  wall: string,
-) {
-  const baseHeight = building.height * 0.55;
-  urbanMass(geometry.shells, building, {
-    y: baseHeight / 2,
-    width: building.width,
-    height: baseHeight,
-    depth: building.depth * 0.78,
-    color: wall,
-  });
-  urbanMass(geometry.wings, building, {
-    y: baseHeight * 0.46,
-    width: building.width * 0.42,
-    height: baseHeight * 0.92,
-    depth: building.depth,
-    color: "#b8b4a9",
-  });
-  urbanMass(geometry.roofs, building, {
-    y: baseHeight + 0.42,
-    width: building.width * 0.72,
-    height: 0.82,
-    depth: building.depth * 0.68,
-    rotationZ: Math.PI * 0.045,
-    color: "#596467",
-  });
-  geometry.cylinders.push({
-    x: building.x,
-    y: CAMPUS_BASE_Y + baseHeight + building.height * 0.22,
-    z: building.z,
-    radius: 0.3,
-    height: building.height * 0.44,
-    color: building.accentColor,
-  });
-  addUrbanFacadeRhythm(geometry, building, baseHeight);
-}
-
-function buildTechnicalHall(
-  geometry: CampusGeometry,
-  building: UrbanBuildingEnvelope,
-  wall: string,
-) {
-  const height = Math.max(2.8, building.height * 0.5);
-  urbanMass(geometry.shells, building, {
-    y: height / 2,
-    width: building.width,
+    x: northSouth
+      ? envelope.x + offset
+      : envelope.x + (edge === "west" ? -1 : 1) * (envelope.width / 2 + 0.025),
+    y: CAMPUS_BASE_Y + y,
+    z: northSouth
+      ? envelope.z + (edge === "north" ? -1 : 1) * (envelope.depth / 2 + 0.025)
+      : envelope.z + offset,
+    width,
     height,
-    depth: building.depth,
-    color: wall,
+    depth,
+    rotationY: northSouth ? 0 : Math.PI / 2,
+    color,
   });
-  for (let bay = -2; bay <= 2; bay += 1) {
-    urbanMass(geometry.roofs, building, {
-      x: (bay * building.width) / 5,
-      y: height + 0.18,
-      width: building.width / 5.2,
-      height: 0.22,
-      depth: building.depth * 0.9,
-      rotationZ: bay % 2 === 0 ? 0.14 : -0.14,
-      color: "#596365",
+}
+
+function addChicagoFacade(
+  geometry: CampusGeometry,
+  envelope: UrbanArchitecturalEnvelope,
+) {
+  const streetEdges = [envelope.primaryEdge, envelope.secondaryEdge] as const;
+  const curtain = Boolean(envelope.curtainWallVariant);
+  const warehouse =
+    envelope.facadeFamily === "fulton-brick-warehouse" ||
+    envelope.facadeFamily === "narrow-storefront-row";
+  const civic = envelope.facadeFamily === "civic-institutional";
+  const glazingColor =
+    envelope.curtainWallVariant === "light-blue-green-grid"
+      ? "#7fa7aa"
+      : envelope.curtainWallVariant === "bronze-vertical-fins"
+        ? "#746f64"
+        : curtain
+          ? "#455a60"
+          : "#4d6970";
+  const frameColor =
+    envelope.curtainWallVariant === "bronze-vertical-fins"
+      ? "#7d6549"
+      : curtain
+        ? "#263237"
+        : envelope.facadeFamily === "fulton-brick-warehouse"
+          ? "#d0b691"
+          : "#756b5e";
+  const availableHeight = Math.max(2.4, envelope.height - 2.15);
+  const floorHeight = warehouse ? 1.25 : curtain ? 0.92 : 1.08;
+  const floorCount = Math.max(
+    2,
+    Math.min(11, Math.floor(availableHeight / floorHeight)),
+  );
+
+  for (const edge of streetEdges) {
+    const facadeLength =
+      edge === "north" || edge === "south"
+        ? envelope.width
+        : envelope.depth;
+    const bayCount = Math.max(2, Math.min(5, Math.floor(facadeLength / 0.84)));
+    const bayPitch = (facadeLength * 0.82) / bayCount;
+    for (let floor = 0; floor < floorCount; floor += 1) {
+      const y = 2.25 + floor * floorHeight;
+      for (let bay = 0; bay < bayCount; bay += 1) {
+        const offset = (bay - (bayCount - 1) / 2) * bayPitch;
+        addFacadePanel(
+          geometry.glazing,
+          envelope,
+          edge,
+          offset,
+          y,
+          bayPitch * (curtain ? 0.9 : civic ? 0.46 : warehouse ? 0.64 : 0.57),
+          floorHeight * (curtain ? 0.72 : warehouse ? 0.66 : 0.56),
+          0.055,
+          glazingColor,
+        );
+      }
+      if (curtain || warehouse) {
+        addFacadePanel(
+          geometry.details,
+          envelope,
+          edge,
+          0,
+          y - floorHeight * 0.48,
+          facadeLength * 0.88,
+          curtain ? 0.08 : 0.12,
+          0.07,
+          frameColor,
+        );
+      }
+    }
+    if (curtain) {
+      for (let bay = 0; bay <= bayCount; bay += 1) {
+        addFacadePanel(
+          geometry.details,
+          envelope,
+          edge,
+          (bay - bayCount / 2) * bayPitch,
+          2.15 + (floorCount * floorHeight) / 2,
+          0.055,
+          floorCount * floorHeight,
+          0.075,
+          frameColor,
+        );
+      }
+    }
+    if (!curtain) {
+      addFacadePanel(
+        geometry.details,
+        envelope,
+        edge,
+        0,
+        Math.min(envelope.height - 0.18, 2.15 + floorCount * floorHeight),
+        facadeLength * 0.94,
+        envelope.facadeFamily === "art-deco-setback" ? 0.26 : 0.16,
+        0.1,
+        frameColor,
+      );
+    }
+    if (envelope.facadeFamily === "riverfront-terrace") {
+      for (let terrace = 0; terrace < Math.min(3, floorCount - 1); terrace += 1) {
+        addFacadePanel(
+          geometry.accents,
+          envelope,
+          edge,
+          0,
+          3.05 + terrace * floorHeight * 1.75,
+          facadeLength * (0.82 - terrace * 0.08),
+          0.08,
+          0.34,
+          "#a6aaa4",
+        );
+      }
+    }
+    if (
+      envelope.facadeFamily === "art-deco-setback" ||
+      envelope.facadeFamily === "chicago-school-masonry"
+    ) {
+      for (const pier of [-1, 1]) {
+        addFacadePanel(
+          geometry.details,
+          envelope,
+          edge,
+          pier * facadeLength * 0.31,
+          Math.min(envelope.height, 2.1 + floorCount * floorHeight) / 2 + 1,
+          envelope.facadeFamily === "art-deco-setback" ? 0.11 : 0.08,
+          Math.min(envelope.height - 0.4, floorCount * floorHeight + 1.4),
+          0.085,
+          frameColor,
+        );
+      }
+    }
+    if (envelope.facadeFamily === "narrow-storefront-row") {
+      addFacadePanel(
+        geometry.details,
+        envelope,
+        edge,
+        0,
+        Math.min(envelope.height - 0.05, 2.3 + floorCount * floorHeight),
+        facadeLength,
+        0.12,
+        0.18,
+        "#493f37",
+      );
+    }
+  }
+
+  if (envelope.landmark) {
+    geometry.cylinders.push({
+      x: envelope.x,
+      y: CAMPUS_BASE_Y + envelope.height + 0.9,
+      z: envelope.z,
+      radius: 0.12,
+      height: 1.8,
+      color: "#4e5d60",
     });
   }
-  addUrbanFacadeRhythm(geometry, building, height);
+}
+
+function storefrontColor(storefront: UrbanStorefront): string {
+  const colors = [
+    "#a64f3d",
+    "#315f76",
+    "#52734b",
+    "#d29b42",
+    "#6d4f79",
+    "#bd6d3d",
+    "#48777a",
+    "#9a5c70",
+    "#a33f35",
+    "#4f657a",
+  ];
+  return colors[stableCityHash(storefront.category) % colors.length]!;
+}
+
+function addUrbanStorefront(
+  geometry: CampusGeometry,
+  storefront: UrbanStorefront,
+) {
+  const color = storefrontColor(storefront);
+  geometry.glazing.push({
+    x: storefront.x,
+    y: CAMPUS_BASE_Y + 0.88,
+    z: storefront.z,
+    width: storefront.width,
+    height: 1.22,
+    depth: 0.075,
+    rotationY: storefront.rotation,
+    color: "#314e54",
+  });
+  geometry.accents.push({
+    x: storefront.x,
+    y: CAMPUS_BASE_Y + 1.57,
+    z: storefront.z,
+    width: storefront.width * 0.92,
+    height: 0.24,
+    depth: 0.14,
+    rotationY: storefront.rotation,
+    color,
+  });
+  if (stableCityHash(storefront.id) % 4 !== 0) {
+    const direction =
+      storefront.edge === "north" || storefront.edge === "west" ? -1 : 1;
+    geometry.accents.push({
+      x:
+        storefront.edge === "east" || storefront.edge === "west"
+          ? storefront.x + direction * 0.16
+          : storefront.x,
+      y: CAMPUS_BASE_Y + 1.4,
+      z:
+        storefront.edge === "north" || storefront.edge === "south"
+          ? storefront.z + direction * 0.16
+          : storefront.z,
+      width: storefront.width * 0.78,
+      height: 0.08,
+      depth: 0.42,
+      rotationX: -0.08,
+      rotationY: storefront.rotation,
+      color,
+    });
+  }
+  if (stableCityHash(storefront.signLabel) % 3 === 0) {
+    const direction =
+      storefront.edge === "north" || storefront.edge === "west" ? -1 : 1;
+    geometry.accents.push({
+      x:
+        storefront.edge === "east" || storefront.edge === "west"
+          ? storefront.x + direction * 0.32
+          : storefront.x + storefront.width * 0.36,
+      y: CAMPUS_BASE_Y + 1.24,
+      z:
+        storefront.edge === "north" || storefront.edge === "south"
+          ? storefront.z + direction * 0.32
+          : storefront.z + storefront.width * 0.36,
+      width: 0.08,
+      height: 0.38,
+      depth: 0.42,
+      rotationY: storefront.rotation,
+      color,
+    });
+  }
+  geometry.details.push(
+    {
+      x: storefront.x,
+      y: CAMPUS_BASE_Y + 0.9,
+      z: storefront.z,
+      width: 0.055,
+      height: 1.28,
+      depth: 0.1,
+      rotationY: storefront.rotation,
+      color: "#c3bca9",
+    },
+    {
+      x: storefront.x,
+      y: CAMPUS_BASE_Y + 0.24,
+      z: storefront.z,
+      width: storefront.width * 0.96,
+      height: 0.08,
+      depth: 0.16,
+      rotationY: storefront.rotation,
+      color: "#b9b5a9",
+    },
+  );
 }
 
 function makeUrbanFabricGeometry(
@@ -1147,26 +1289,62 @@ function makeUrbanFabricGeometry(
       .map((entityId) => plan.entityAddresses[entityId]?.buildingId)
       .filter((id): id is string => Boolean(id)),
   );
-  for (const building of plan.buildings) {
-    if (reservedBuildingIds.has(building.id)) continue;
-    const wall = URBAN_MATERIAL_COLORS[building.material];
-    switch (building.typology) {
-      case "narrow-street":
-        buildNarrowStreetBuilding(geometry, building, wall);
-        break;
-      case "perimeter-courtyard":
-        buildPerimeterCourtyard(geometry, building, wall);
-        break;
-      case "podium-tower":
-        buildPodiumTower(geometry, building, wall);
-        break;
-      case "civic-landmark":
-        buildCivicLandmark(geometry, building, wall);
-        break;
-      case "technical-hall":
-        buildTechnicalHall(geometry, building, wall);
-        break;
-    }
+  const visibleEnvelopeIds = new Set(
+    plan.architecturalEnvelopes
+      .filter(
+        (envelope) => !reservedBuildingIds.has(envelope.semanticBuildingId),
+      )
+      .map((envelope) => envelope.id),
+  );
+  for (const block of plan.blocks) {
+    const alley = block.characterZone === "fulton-market" ? 0.58 : 0.42;
+    geometry.plazas.push(
+      {
+        x: block.x,
+        y: CAMPUS_BASE_Y + 0.025,
+        z: block.z,
+        width: alley,
+        height: 0.05,
+        depth: block.depth - 0.5,
+        color: "#85877f",
+      },
+      {
+        x: block.x,
+        y: CAMPUS_BASE_Y + 0.03,
+        z: block.z,
+        width: block.width - 0.5,
+        height: 0.055,
+        depth: alley,
+        color: "#8d8c83",
+      },
+    );
+  }
+  for (const mass of plan.massingVolumes) {
+    if (!visibleEnvelopeIds.has(mass.architecturalEnvelopeId)) continue;
+    const target =
+      mass.kind === "roof-house" || mass.kind === "crown"
+        ? geometry.roofs
+        : mass.kind === "base" || mass.kind === "shoulder"
+          ? geometry.wings
+          : geometry.shells;
+    target.push({
+      x: mass.x,
+      y: CAMPUS_BASE_Y + mass.y,
+      z: mass.z,
+      width: mass.width,
+      height: mass.height,
+      depth: mass.depth,
+      rotationY: mass.rotation,
+      color: URBAN_MATERIAL_COLORS[mass.material],
+    });
+  }
+  for (const envelope of plan.architecturalEnvelopes) {
+    if (!visibleEnvelopeIds.has(envelope.id)) continue;
+    addChicagoFacade(geometry, envelope);
+  }
+  for (const storefront of plan.storefronts) {
+    if (!visibleEnvelopeIds.has(storefront.architecturalEnvelopeId)) continue;
+    addUrbanStorefront(geometry, storefront);
   }
   if (activeComponentIds && activeComponentIds.size > 0) {
     const assignmentByComponentId = new Map(
@@ -1222,31 +1400,83 @@ function makeUrbanFabricGeometry(
         },
       );
     }
+    for (const envelope of plan.architecturalEnvelopes) {
+      if (!activeComponentIds.has(envelope.componentId)) continue;
+      const color =
+        assignmentByComponentId.get(envelope.componentId)?.accentColor ??
+        "#8be4cf";
+      const edge = 0.09;
+      const y = CAMPUS_BASE_Y + envelope.height + 0.1;
+      geometry.selection.push(
+        {
+          x: envelope.x,
+          y,
+          z: envelope.z - envelope.depth * 0.44,
+          width: envelope.width * 0.86,
+          height: 0.08,
+          depth: edge,
+          color,
+        },
+        {
+          x: envelope.x,
+          y,
+          z: envelope.z + envelope.depth * 0.44,
+          width: envelope.width * 0.86,
+          height: 0.08,
+          depth: edge,
+          color,
+        },
+        {
+          x: envelope.x - envelope.width * 0.44,
+          y,
+          z: envelope.z,
+          width: edge,
+          height: 0.08,
+          depth: envelope.depth * 0.86,
+          color,
+        },
+        {
+          x: envelope.x + envelope.width * 0.44,
+          y,
+          z: envelope.z,
+          width: edge,
+          height: 0.08,
+          depth: envelope.depth * 0.86,
+          color,
+        },
+      );
+    }
   }
   return geometry;
 }
 
 function UrbanBuildingHitTargets({
-  buildings,
+  plan,
   reservedEntityIds,
   onHoverEntity,
   onSelectEntity,
 }: {
-  buildings: readonly UrbanBuildingEnvelope[];
+  plan: UrbanFabricPlan;
   reservedEntityIds: ReadonlySet<string>;
   onHoverEntity?: (entityId: string | null) => void;
   onSelectEntity?: (entityId: string) => void;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  const semanticBuildingById = useMemo(
+    () => new Map(plan.buildings.map((building) => [building.id, building])),
+    [plan.buildings],
+  );
   const interactiveBuildings = useMemo(
     () =>
-      buildings.filter(
-        (building) =>
-          !building.entityIds.some((id) => reservedEntityIds.has(id)),
-      ),
-    [buildings, reservedEntityIds],
+      plan.architecturalEnvelopes.filter((envelope) => {
+        const semantic = semanticBuildingById.get(envelope.semanticBuildingId);
+        return !semantic?.entityIds.some((id) => reservedEntityIds.has(id));
+      }),
+    [plan.architecturalEnvelopes, reservedEntityIds, semanticBuildingById],
   );
+  const primaryEntityIdFor = (envelope: UrbanArchitecturalEnvelope) =>
+    semanticBuildingById.get(envelope.semanticBuildingId)?.primaryEntityId;
   useLayoutEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -1267,7 +1497,9 @@ function UrbanBuildingHitTargets({
   const entityIdAt = (instanceId: number | undefined) =>
     instanceId === undefined
       ? undefined
-      : interactiveBuildings[instanceId]?.primaryEntityId;
+      : interactiveBuildings[instanceId]
+        ? primaryEntityIdFor(interactiveBuildings[instanceId]!)
+        : undefined;
   if (interactiveBuildings.length === 0) return null;
   return (
     <instancedMesh

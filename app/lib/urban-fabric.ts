@@ -6,7 +6,7 @@ import type {
   SemanticRoadClass,
 } from "./semantic-city";
 
-export const URBAN_FABRIC_VERSION = "0.1" as const;
+export const URBAN_FABRIC_VERSION = "0.2" as const;
 
 export type UrbanStreetHierarchy = "primary" | "secondary" | "local";
 export type UrbanBlockEdge = "north" | "east" | "south" | "west";
@@ -20,7 +20,60 @@ export type UrbanMaterialKey =
   | "limestone"
   | "warm-concrete"
   | "brick"
-  | "slate";
+  | "slate"
+  | "red-brick"
+  | "cream-terra-cotta"
+  | "dark-metal"
+  | "blue-green-glass"
+  | "bronze-metal";
+export type UrbanCharacterZone =
+  | "loop-core"
+  | "river-north"
+  | "fulton-market"
+  | "civic-anchor";
+export type UrbanFacadeFamily =
+  | "chicago-school-masonry"
+  | "miesian-grid"
+  | "blue-green-curtain-wall"
+  | "bronze-vertical-modern"
+  | "fulton-brick-warehouse"
+  | "narrow-storefront-row"
+  | "art-deco-setback"
+  | "civic-institutional"
+  | "riverfront-terrace";
+export type UrbanCurtainWallVariant =
+  | "dark-miesian-grid"
+  | "light-blue-green-grid"
+  | "bronze-vertical-fins";
+export type UrbanStorefrontCategory =
+  | "corner-cafe"
+  | "bookshop"
+  | "neighborhood-grocer"
+  | "design-studio"
+  | "music-room"
+  | "bakery"
+  | "repair-shop"
+  | "gallery"
+  | "restaurant"
+  | "hotel-lobby";
+export type UrbanMassingProfile =
+  | "loop-podium-slab"
+  | "loop-setback-tower"
+  | "miesian-plaza-tower"
+  | "river-terrace-midrise"
+  | "river-corner-tower"
+  | "fulton-loft"
+  | "fulton-sawtooth-addition"
+  | "warehouse-glass-addition"
+  | "chicago-school-corner"
+  | "civic-shoulder-landmark";
+export type UrbanMassingKind =
+  | "base"
+  | "shoulder"
+  | "shaft"
+  | "setback"
+  | "crown"
+  | "roof-house";
 
 export interface UrbanStreet extends Omit<CityPoint, "y"> {
   id: string;
@@ -45,6 +98,7 @@ export interface UrbanBlock extends CityPoint {
   depth: number;
   adjacentBlockIds: string[];
   streetIdsByEdge: Record<UrbanBlockEdge, string>;
+  characterZone: UrbanCharacterZone;
 }
 
 export interface UrbanComponentAssignment {
@@ -86,6 +140,91 @@ export interface UrbanBuildingEnvelope extends CityPoint {
   entityIds: string[];
 }
 
+/**
+ * One repository component can occupy several real-looking buildings. These
+ * envelopes are architectural subdivision only: they never invent files,
+ * dependencies, or selectable semantic entities.
+ */
+export interface UrbanArchitecturalEnvelope extends CityPoint {
+  id: string;
+  semanticBuildingId: string;
+  componentId: string;
+  blockId: string;
+  parcelId: string;
+  characterZone: UrbanCharacterZone;
+  facadeFamily: UrbanFacadeFamily;
+  curtainWallVariant: UrbanCurtainWallVariant | null;
+  massingProfile: UrbanMassingProfile;
+  material: UrbanMaterialKey;
+  width: number;
+  depth: number;
+  height: number;
+  rotation: number;
+  primaryEdge: UrbanBlockEdge;
+  secondaryEdge: UrbanBlockEdge;
+  primaryStreetId: string;
+  secondaryStreetId: string;
+  entrance: CityPoint;
+  landmark: boolean;
+}
+
+export interface UrbanArchitecturalParcel extends CityPoint {
+  id: string;
+  blockId: string;
+  componentId: string;
+  architecturalEnvelopeId: string;
+  width: number;
+  depth: number;
+  primaryEdge: UrbanBlockEdge;
+  secondaryEdge: UrbanBlockEdge;
+  frontage: number;
+}
+
+export interface UrbanMassingVolume extends CityPoint {
+  id: string;
+  architecturalEnvelopeId: string;
+  componentId: string;
+  blockId: string;
+  kind: UrbanMassingKind;
+  material: UrbanMaterialKey;
+  y: number;
+  width: number;
+  depth: number;
+  height: number;
+  rotation: number;
+}
+
+export interface UrbanStorefront extends CityPoint {
+  id: string;
+  architecturalEnvelopeId: string;
+  componentId: string;
+  blockId: string;
+  category: UrbanStorefrontCategory;
+  signLabel: string;
+  streetId: string;
+  edge: UrbanBlockEdge;
+  width: number;
+  rotation: number;
+  active: boolean;
+}
+
+export interface UrbanMorphologyMetrics {
+  architecturalEnvelopeCount: number;
+  massingVolumeCount: number;
+  storefrontCount: number;
+  facadeInstanceCount: number;
+  medianFrontageUnitsPerBlock: number;
+  frontageCoveragePct: number;
+  loopFrontageCoveragePct: number;
+  streetWallGapPct: number;
+  loopStreetWallGapPct: number;
+  activeGroundFloorPct: number;
+  fultonActiveGroundFloorPct: number;
+  genericLawnRatioPct: number;
+  diverseAdjacentPairPct: number;
+  landmarkRatioPct: number;
+}
+
 export interface UrbanEntityAddress {
   entityId: string;
   componentId: string;
@@ -106,12 +245,18 @@ export interface UrbanFabricPlan {
   componentAssignments: UrbanComponentAssignment[];
   parcels: UrbanParcel[];
   buildings: UrbanBuildingEnvelope[];
+  architecturalParcels: UrbanArchitecturalParcel[];
+  architecturalEnvelopes: UrbanArchitecturalEnvelope[];
+  massingVolumes: UrbanMassingVolume[];
+  storefronts: UrbanStorefront[];
+  morphology: UrbanMorphologyMetrics;
   entityAddresses: Record<string, UrbanEntityAddress>;
   componentBlockIds: Record<string, string[]>;
 }
 
 export interface PlanUrbanFabricInput {
   semanticPlan: SemanticCityPlan;
+  seed?: string;
 }
 
 interface WaterEnvelope {
@@ -144,6 +289,43 @@ const MATERIALS: readonly UrbanMaterialKey[] = [
   "brick",
   "slate",
 ];
+
+const ARCHITECTURAL_MATERIALS: readonly UrbanMaterialKey[] = [
+  "limestone",
+  "red-brick",
+  "cream-terra-cotta",
+  "dark-metal",
+  "blue-green-glass",
+  "bronze-metal",
+  "warm-concrete",
+  "brick",
+];
+
+const STOREFRONT_CATEGORIES: readonly UrbanStorefrontCategory[] = [
+  "corner-cafe",
+  "bookshop",
+  "neighborhood-grocer",
+  "design-studio",
+  "music-room",
+  "bakery",
+  "repair-shop",
+  "gallery",
+  "restaurant",
+  "hotel-lobby",
+];
+
+const STORE_LABELS = [
+  "Canal Cafe",
+  "Lake Books",
+  "Market Pantry",
+  "Grid Studio",
+  "Blue Note Room",
+  "Union Bakery",
+  "City Repair",
+  "North Gallery",
+  "Dearborn Table",
+  "Loop House",
+] as const;
 
 function compareText(left: string, right: string): number {
   return left.localeCompare(right, "en");
@@ -363,6 +545,12 @@ function makeBankFabric(
           south: horizontalStreetId(seed, layout.bank, row + 1),
           west: verticalStreetId(seed, layout.bank, westBoundary),
         },
+        characterZone:
+          column === 0
+            ? "river-north"
+            : layout.bank === "east"
+              ? "loop-core"
+              : "fulton-market",
       });
     }
   }
@@ -602,6 +790,537 @@ function makeBuildingsAndParcels(
   };
 }
 
+function characterZoneBlocks(
+  blocks: readonly UrbanBlock[],
+  assignments: readonly UrbanComponentAssignment[],
+  components: readonly SemanticComponent[],
+): UrbanBlock[] {
+  const anchorComponent = orderedComponents(components)[0];
+  const anchorAssignment = assignments.find(
+    (assignment) => assignment.componentId === anchorComponent?.id,
+  );
+  const anchorBlockId = anchorAssignment?.blockIds
+    .map((id) => blocks.find((block) => block.id === id))
+    .filter((block): block is UrbanBlock => Boolean(block))
+    .sort(
+      (left, right) =>
+        right.column - left.column || compareText(left.id, right.id),
+    )[0]?.id;
+
+  return blocks.map((block) => ({
+    ...block,
+    characterZone:
+      block.id === anchorBlockId ? "civic-anchor" : block.characterZone,
+  }));
+}
+
+function massingProfileFor(
+  zone: UrbanCharacterZone,
+  cornerIndex: number,
+  hash: number,
+): UrbanMassingProfile {
+  const profiles: Record<UrbanCharacterZone, readonly UrbanMassingProfile[]> = {
+    "loop-core": [
+      "loop-podium-slab",
+      "loop-setback-tower",
+      "miesian-plaza-tower",
+      "chicago-school-corner",
+    ],
+    "river-north": [
+      "river-terrace-midrise",
+      "river-corner-tower",
+      "chicago-school-corner",
+      "loop-setback-tower",
+    ],
+    "fulton-market": [
+      "fulton-loft",
+      "fulton-sawtooth-addition",
+      "warehouse-glass-addition",
+      "chicago-school-corner",
+    ],
+    "civic-anchor": ["civic-shoulder-landmark"],
+  };
+  const options = profiles[zone];
+  return options[(cornerIndex + hash) % options.length]!;
+}
+
+function facadeFor(
+  zone: UrbanCharacterZone,
+  cornerIndex: number,
+  hash: number,
+): UrbanFacadeFamily {
+  const families: Record<UrbanCharacterZone, readonly UrbanFacadeFamily[]> = {
+    "loop-core": [
+      "miesian-grid",
+      "chicago-school-masonry",
+      "blue-green-curtain-wall",
+      "art-deco-setback",
+      "bronze-vertical-modern",
+    ],
+    "river-north": [
+      "riverfront-terrace",
+      "chicago-school-masonry",
+      "blue-green-curtain-wall",
+      "narrow-storefront-row",
+    ],
+    "fulton-market": [
+      "fulton-brick-warehouse",
+      "narrow-storefront-row",
+      "chicago-school-masonry",
+      "blue-green-curtain-wall",
+    ],
+    "civic-anchor": ["civic-institutional"],
+  };
+  const options = families[zone];
+  return options[(cornerIndex + hash) % options.length]!;
+}
+
+function curtainWallFor(
+  family: UrbanFacadeFamily,
+): UrbanCurtainWallVariant | null {
+  if (family === "miesian-grid") return "dark-miesian-grid";
+  if (family === "blue-green-curtain-wall") {
+    return "light-blue-green-grid";
+  }
+  if (family === "bronze-vertical-modern") return "bronze-vertical-fins";
+  return null;
+}
+
+function architecturalMaterialFor(
+  family: UrbanFacadeFamily,
+  hash: number,
+): UrbanMaterialKey {
+  if (family === "miesian-grid") return "dark-metal";
+  if (family === "blue-green-curtain-wall") return "blue-green-glass";
+  if (family === "bronze-vertical-modern") return "bronze-metal";
+  if (family === "fulton-brick-warehouse") return "red-brick";
+  if (family === "chicago-school-masonry") {
+    return hash % 2 === 0 ? "cream-terra-cotta" : "red-brick";
+  }
+  if (family === "civic-institutional") return "limestone";
+  if (family === "art-deco-setback") return "limestone";
+  return ARCHITECTURAL_MATERIALS[hash % ARCHITECTURAL_MATERIALS.length]!;
+}
+
+function baseHeightFor(
+  zone: UrbanCharacterZone,
+  profile: UrbanMassingProfile,
+  hash: number,
+): number {
+  const jitter = (hash % 19) * 0.16;
+  if (profile === "civic-shoulder-landmark") return round(14.8 + jitter);
+  if (zone === "loop-core") return round(11.5 + jitter * 1.8);
+  if (profile === "river-corner-tower") return round(12.2 + jitter);
+  if (zone === "river-north") return round(7.4 + jitter);
+  return round(5.2 + jitter * 0.72);
+}
+
+function volume(
+  envelope: UrbanArchitecturalEnvelope,
+  kind: UrbanMassingKind,
+  index: number,
+  x: number,
+  z: number,
+  y: number,
+  width: number,
+  depth: number,
+  height: number,
+  material = envelope.material,
+): UrbanMassingVolume {
+  return {
+    id: stableId("mass", `${envelope.id}:${kind}:${index}`),
+    architecturalEnvelopeId: envelope.id,
+    componentId: envelope.componentId,
+    blockId: envelope.blockId,
+    kind,
+    material,
+    x: round(x),
+    y: round(y),
+    z: round(z),
+    width: round(width),
+    depth: round(depth),
+    height: round(height),
+    rotation: envelope.rotation,
+  };
+}
+
+function massingForEnvelope(
+  envelope: UrbanArchitecturalEnvelope,
+): UrbanMassingVolume[] {
+  const baseHeight = Math.min(3.4, envelope.height * 0.38);
+  const volumes = [
+    volume(
+      envelope,
+      "base",
+      0,
+      envelope.x,
+      envelope.z,
+      baseHeight / 2,
+      envelope.width,
+      envelope.depth,
+      baseHeight,
+    ),
+  ];
+  const upperHeight = envelope.height - baseHeight;
+  if (upperHeight <= 0.4) return volumes;
+  const isWarehouse =
+    envelope.massingProfile === "fulton-loft" ||
+    envelope.massingProfile === "fulton-sawtooth-addition";
+  const isTower =
+    envelope.massingProfile.includes("tower") ||
+    envelope.massingProfile === "miesian-plaza-tower" ||
+    envelope.massingProfile === "civic-shoulder-landmark";
+  if (isTower && upperHeight > 5) {
+    const shoulderHeight = Math.min(2.8, upperHeight * 0.34);
+    volumes.push(
+      volume(
+        envelope,
+        "shoulder",
+        1,
+        envelope.x,
+        envelope.z,
+        baseHeight + shoulderHeight / 2,
+        envelope.width * 0.9,
+        envelope.depth * 0.88,
+        shoulderHeight,
+      ),
+    );
+    const shaftHeight = upperHeight - shoulderHeight;
+    volumes.push(
+      volume(
+        envelope,
+        "shaft",
+        2,
+        envelope.x + envelope.width * 0.07,
+        envelope.z - envelope.depth * 0.04,
+        baseHeight + shoulderHeight + shaftHeight / 2,
+        envelope.width * 0.63,
+        envelope.depth * 0.66,
+        shaftHeight,
+      ),
+    );
+  } else {
+    volumes.push(
+      volume(
+        envelope,
+        isWarehouse ? "shaft" : "setback",
+        1,
+        envelope.x,
+        envelope.z,
+        baseHeight + upperHeight / 2,
+        envelope.width * (isWarehouse ? 0.98 : 0.88),
+        envelope.depth * (isWarehouse ? 0.98 : 0.86),
+        upperHeight,
+      ),
+    );
+  }
+  if (
+    envelope.height > 9 ||
+    envelope.massingProfile === "warehouse-glass-addition"
+  ) {
+    const roofHeight = 0.34;
+    volumes.push(
+      volume(
+        envelope,
+        "roof-house",
+        3,
+        envelope.x,
+        envelope.z,
+        envelope.height + roofHeight / 2,
+        envelope.width * 0.28,
+        envelope.depth * 0.3,
+        roofHeight,
+        envelope.curtainWallVariant ? "dark-metal" : "slate",
+      ),
+    );
+  }
+  return volumes;
+}
+
+function storefrontPoint(
+  envelope: UrbanArchitecturalEnvelope,
+  edge: UrbanBlockEdge,
+): CityPoint {
+  if (edge === "north") return point(envelope.x, envelope.z - envelope.depth / 2 - 0.03);
+  if (edge === "south") return point(envelope.x, envelope.z + envelope.depth / 2 + 0.03);
+  if (edge === "west") return point(envelope.x - envelope.width / 2 - 0.03, envelope.z);
+  return point(envelope.x + envelope.width / 2 + 0.03, envelope.z);
+}
+
+function morphologyMetrics(
+  blocks: readonly UrbanBlock[],
+  parcels: readonly UrbanArchitecturalParcel[],
+  envelopes: readonly UrbanArchitecturalEnvelope[],
+  volumes: readonly UrbanMassingVolume[],
+  storefronts: readonly UrbanStorefront[],
+): UrbanMorphologyMetrics {
+  const perimeterFor = (selected: readonly UrbanBlock[]) =>
+    selected.reduce((sum, block) => sum + 2 * (block.width + block.depth), 0);
+  const frontageFor = (selected: readonly UrbanBlock[]) => {
+    const ids = new Set(selected.map((block) => block.id));
+    return parcels
+      .filter((parcel) => ids.has(parcel.blockId))
+      .reduce((sum, parcel) => sum + parcel.frontage, 0);
+  };
+  const coverageFor = (selected: readonly UrbanBlock[]) =>
+    (100 * frontageFor(selected)) / Math.max(0.001, perimeterFor(selected));
+  const unitCounts = blocks
+    .map(
+      (block) =>
+        envelopes.filter((envelope) => envelope.blockId === block.id).length,
+    )
+    .sort((left, right) => left - right);
+  const activeStorefrontWidth = storefronts
+    .filter((storefront) => storefront.active)
+    .reduce((sum, storefront) => sum + storefront.width, 0);
+  const fultonBlocks = blocks.filter(
+    (block) => block.characterZone === "fulton-market",
+  );
+  const fultonIds = new Set(fultonBlocks.map((block) => block.id));
+  const fultonStorefrontWidth = storefronts
+    .filter(
+      (storefront) =>
+        storefront.active && fultonIds.has(storefront.blockId),
+    )
+    .reduce((sum, storefront) => sum + storefront.width, 0);
+  const loopBlocks = blocks.filter(
+    (block) => block.characterZone === "loop-core",
+  );
+  let adjacentPairs = 0;
+  let diversePairs = 0;
+  for (const block of blocks) {
+    const candidates = envelopes
+      .filter((envelope) => envelope.blockId === block.id)
+      .sort((left, right) => compareText(left.id, right.id));
+    for (let index = 0; index < candidates.length; index += 1) {
+      const left = candidates[index]!;
+      const right = candidates[(index + 1) % candidates.length]!;
+      const differences = [
+        left.facadeFamily !== right.facadeFamily,
+        left.material !== right.material,
+        Math.floor(left.height / 3) !== Math.floor(right.height / 3),
+        left.massingProfile !== right.massingProfile,
+      ].filter(Boolean).length;
+      adjacentPairs += 1;
+      if (differences >= 2) diversePairs += 1;
+    }
+  }
+  const cityCoverage = coverageFor(blocks);
+  const loopCoverage = coverageFor(loopBlocks);
+  const facadeInstanceCount = envelopes.reduce((sum, envelope) => {
+    const curtain = envelope.curtainWallVariant !== null;
+    const warehouse =
+      envelope.facadeFamily === "fulton-brick-warehouse" ||
+      envelope.facadeFamily === "narrow-storefront-row";
+    const floorHeight = warehouse ? 1.25 : curtain ? 0.92 : 1.08;
+    const floors = Math.max(
+      2,
+      Math.min(11, Math.floor(Math.max(2.4, envelope.height - 2.15) / floorHeight)),
+    );
+    const northBays = Math.max(
+      2,
+      Math.min(5, Math.floor(envelope.width / 0.84)),
+    );
+    const sideBays = Math.max(
+      2,
+      Math.min(5, Math.floor(envelope.depth / 0.84)),
+    );
+    const windows = floors * (northBays + sideBays);
+    const frames = curtain
+      ? floors * 2 + northBays + sideBays + 2
+      : floors * (warehouse ? 2 : 0) + 2;
+    return sum + windows + frames;
+  }, 0);
+  return {
+    architecturalEnvelopeCount: envelopes.length,
+    massingVolumeCount: volumes.length,
+    storefrontCount: storefronts.length,
+    facadeInstanceCount: facadeInstanceCount + storefronts.length * 5,
+    medianFrontageUnitsPerBlock:
+      unitCounts[Math.floor(unitCounts.length / 2)] ?? 0,
+    frontageCoveragePct: round(cityCoverage),
+    loopFrontageCoveragePct: round(loopCoverage),
+    streetWallGapPct: round(100 - cityCoverage),
+    loopStreetWallGapPct: round(100 - loopCoverage),
+    activeGroundFloorPct: round(
+      (100 * activeStorefrontWidth) /
+        Math.max(0.001, parcels.reduce((sum, parcel) => sum + parcel.frontage, 0)),
+    ),
+    fultonActiveGroundFloorPct: round(
+      (100 * fultonStorefrontWidth) /
+        Math.max(0.001, frontageFor(fultonBlocks)),
+    ),
+    genericLawnRatioPct: 0,
+    diverseAdjacentPairPct: round(
+      (100 * diversePairs) / Math.max(1, adjacentPairs),
+    ),
+    landmarkRatioPct: round(
+      (100 * envelopes.filter((envelope) => envelope.landmark).length) /
+        Math.max(1, envelopes.length),
+    ),
+  };
+}
+
+function makeChicagoFabricDetails(
+  seed: string,
+  blocks: readonly UrbanBlock[],
+  assignments: readonly UrbanComponentAssignment[],
+  semanticBuildings: readonly UrbanBuildingEnvelope[],
+): {
+  architecturalParcels: UrbanArchitecturalParcel[];
+  architecturalEnvelopes: UrbanArchitecturalEnvelope[];
+  massingVolumes: UrbanMassingVolume[];
+  storefronts: UrbanStorefront[];
+  morphology: UrbanMorphologyMetrics;
+} {
+  const componentByBlockId = new Map<string, string>();
+  for (const assignment of assignments) {
+    for (const blockId of assignment.blockIds) {
+      componentByBlockId.set(blockId, assignment.componentId);
+    }
+  }
+  const buildingsByBlockId = new Map<string, UrbanBuildingEnvelope[]>();
+  for (const building of semanticBuildings) {
+    const candidates = buildingsByBlockId.get(building.blockId) ?? [];
+    candidates.push(building);
+    buildingsByBlockId.set(building.blockId, candidates);
+  }
+  const architecturalParcels: UrbanArchitecturalParcel[] = [];
+  const architecturalEnvelopes: UrbanArchitecturalEnvelope[] = [];
+  const storefronts: UrbanStorefront[] = [];
+  const massingVolumes: UrbanMassingVolume[] = [];
+  const cornerDefinitions = [
+    { primary: "north" as const, secondary: "west" as const, sx: -1, sz: -1 },
+    { primary: "north" as const, secondary: "east" as const, sx: 1, sz: -1 },
+    { primary: "south" as const, secondary: "west" as const, sx: -1, sz: 1 },
+    { primary: "south" as const, secondary: "east" as const, sx: 1, sz: 1 },
+  ];
+
+  for (const block of [...blocks].sort((left, right) => compareText(left.id, right.id))) {
+    const componentId = componentByBlockId.get(block.id);
+    const semanticCandidates = (buildingsByBlockId.get(block.id) ?? []).sort(
+      (left, right) => compareText(left.id, right.id),
+    );
+    if (!componentId || semanticCandidates.length === 0) continue;
+    const inset = 0.26;
+    const courtyardGap = block.characterZone === "fulton-market" ? 0.54 : 0.38;
+    const blockHash = stableCityHash(`${seed}:${block.id}:character`);
+    const width = (block.width - inset * 2 - courtyardGap) / 2;
+    const depth = (block.depth - inset * 2 - courtyardGap) / 2;
+    for (const [cornerIndex, corner] of cornerDefinitions.entries()) {
+      const semanticBuilding = semanticCandidates[cornerIndex % semanticCandidates.length]!;
+      const parcelId = stableId("frontage-parcel", `${seed}:${block.id}:${cornerIndex}`);
+      const envelopeId = stableId("architecture", `${seed}:${block.id}:${cornerIndex}`);
+      const hash = stableCityHash(`${seed}:${block.id}:${cornerIndex}`);
+      const facadeFamily = facadeFor(
+        block.characterZone,
+        cornerIndex,
+        blockHash,
+      );
+      const massingProfile = massingProfileFor(
+        block.characterZone,
+        cornerIndex,
+        blockHash,
+      );
+      const x = block.x + corner.sx * (courtyardGap / 4 + width / 2);
+      const z = block.z + corner.sz * (courtyardGap / 4 + depth / 2);
+      const landmark = block.characterZone === "civic-anchor" && cornerIndex === 0;
+      const envelope: UrbanArchitecturalEnvelope = {
+        id: envelopeId,
+        semanticBuildingId: semanticBuilding.id,
+        componentId,
+        blockId: block.id,
+        parcelId,
+        characterZone: block.characterZone,
+        facadeFamily,
+        curtainWallVariant: curtainWallFor(facadeFamily),
+        massingProfile,
+        material: architecturalMaterialFor(facadeFamily, hash),
+        x: round(x),
+        z: round(z),
+        width: round(width),
+        depth: round(depth),
+        height: baseHeightFor(block.characterZone, massingProfile, hash),
+        rotation: 0,
+        primaryEdge: corner.primary,
+        secondaryEdge: corner.secondary,
+        primaryStreetId: block.streetIdsByEdge[corner.primary],
+        secondaryStreetId: block.streetIdsByEdge[corner.secondary],
+        entrance: point(
+          x,
+          block.z + corner.sz * (block.depth / 2 + STREET_GAP / 2),
+        ),
+        landmark,
+      };
+      architecturalParcels.push({
+        id: parcelId,
+        blockId: block.id,
+        componentId,
+        architecturalEnvelopeId: envelopeId,
+        x: envelope.x,
+        z: envelope.z,
+        width: envelope.width,
+        depth: envelope.depth,
+        primaryEdge: corner.primary,
+        secondaryEdge: corner.secondary,
+        frontage: round(envelope.width + envelope.depth),
+      });
+      architecturalEnvelopes.push(envelope);
+      massingVolumes.push(...massingForEnvelope(envelope));
+
+      const storefrontEdges: UrbanBlockEdge[] = landmark
+        ? [corner.primary]
+        : [corner.primary, corner.secondary];
+      storefrontEdges.forEach((edge, storefrontIndex) => {
+        const categoryIndex =
+          (hash + cornerIndex + storefrontIndex) % STOREFRONT_CATEGORIES.length;
+        const category = STOREFRONT_CATEGORIES[categoryIndex]!;
+        const position = storefrontPoint(envelope, edge);
+        storefronts.push({
+          id: stableId("storefront", `${envelope.id}:${edge}`),
+          architecturalEnvelopeId: envelope.id,
+          componentId,
+          blockId: block.id,
+          category,
+          signLabel: STORE_LABELS[categoryIndex]!,
+          streetId:
+            edge === corner.primary
+              ? envelope.primaryStreetId
+              : envelope.secondaryStreetId,
+          edge,
+          x: position.x,
+          z: position.z,
+          width: round(
+            (edge === "north" || edge === "south"
+              ? envelope.width
+              : envelope.depth) * 0.72,
+          ),
+          rotation: edge === "east" || edge === "west" ? Math.PI / 2 : 0,
+          active: block.characterZone !== "civic-anchor" || !landmark,
+        });
+      });
+    }
+  }
+
+  architecturalParcels.sort((left, right) => compareText(left.id, right.id));
+  architecturalEnvelopes.sort((left, right) => compareText(left.id, right.id));
+  massingVolumes.sort((left, right) => compareText(left.id, right.id));
+  storefronts.sort((left, right) => compareText(left.id, right.id));
+  return {
+    architecturalParcels,
+    architecturalEnvelopes,
+    massingVolumes,
+    storefronts,
+    morphology: morphologyMetrics(
+      blocks,
+      architecturalParcels,
+      architecturalEnvelopes,
+      massingVolumes,
+      storefronts,
+    ),
+  };
+}
+
 function fabricBounds(
   streets: readonly UrbanStreet[],
   blocks: readonly UrbanBlock[],
@@ -645,7 +1364,9 @@ function fabricBounds(
  */
 export function planUrbanFabric({
   semanticPlan,
+  seed,
 }: PlanUrbanFabricInput): UrbanFabricPlan {
+  const architectureSeed = seed ?? semanticPlan.seed;
   const water = waterEnvelope(semanticPlan);
   const split = splitComponentsByBank(semanticPlan, water);
   const rowCount = Math.max(1, split.west.length, split.east.length);
@@ -700,7 +1421,7 @@ export function planUrbanFabric({
     }
     streets.sort((left, right) => compareText(left.id, right.id));
   }
-  const blocks = bankFabrics
+  const rawBlocks = bankFabrics
     .flatMap((fabric) => fabric.blocks)
     .sort((left, right) => compareText(left.id, right.id));
   const componentAssignments = layouts
@@ -720,17 +1441,28 @@ export function planUrbanFabric({
       [...assignment.blockIds],
     ]),
   );
+  const blocks = characterZoneBlocks(
+    rawBlocks,
+    componentAssignments,
+    semanticPlan.components,
+  );
   const built = makeBuildingsAndParcels(
     semanticPlan,
     blocks,
     componentAssignments,
+  );
+  const chicago = makeChicagoFabricDetails(
+    architectureSeed,
+    blocks,
+    componentAssignments,
+    built.buildings,
   );
   const bounds = fabricBounds(streets, blocks, semanticPlan.bounds);
 
   return {
     version: URBAN_FABRIC_VERSION,
     seed: `urban-${stableCityHash(
-      `${semanticPlan.seed}:${blocks.map((block) => block.id).join(":")}`,
+      `${architectureSeed}:${blocks.map((block) => block.id).join(":")}`,
     )
       .toString(16)
       .padStart(8, "0")}`,
@@ -740,6 +1472,11 @@ export function planUrbanFabric({
     componentAssignments,
     parcels: built.parcels,
     buildings: built.buildings,
+    architecturalParcels: chicago.architecturalParcels,
+    architecturalEnvelopes: chicago.architecturalEnvelopes,
+    massingVolumes: chicago.massingVolumes,
+    storefronts: chicago.storefronts,
+    morphology: chicago.morphology,
     entityAddresses: built.entityAddresses,
     componentBlockIds,
   };
@@ -752,6 +1489,16 @@ export function selectedUrbanBlocks(
   if (!componentId) return [];
   const ids = new Set(plan.componentBlockIds[componentId] ?? []);
   return plan.blocks.filter((block) => ids.has(block.id));
+}
+
+export function selectedUrbanEnvelopes(
+  plan: UrbanFabricPlan,
+  componentId: string | null | undefined,
+): UrbanArchitecturalEnvelope[] {
+  if (!componentId) return [];
+  return plan.architecturalEnvelopes.filter(
+    (envelope) => envelope.componentId === componentId,
+  );
 }
 
 export function urbanComponentForEntity(
