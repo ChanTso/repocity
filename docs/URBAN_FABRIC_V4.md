@@ -305,8 +305,8 @@ inspector destination; this is also covered by the V4 integration test.
 
 ## Verification and performance report
 
-The final repository suite covers 72 application-library tests, including eight
-new V4 invariants, plus all workspace and rendered-HTML tests. Lint, typecheck,
+The first V4 delivery suite covered 72 application-library tests, including
+eight new V4 invariants, plus all workspace and rendered-HTML tests. Lint, typecheck,
 unit tests, production build and rendered-HTML tests pass. The existing Vinext
 route-classification and greater-than-500-kB chunk warnings remain unchanged.
 
@@ -324,3 +324,201 @@ claim that the 15% threshold passed. The available same-browser observation,
 bounded scene counts, retained instancing, production build and unchanged chunk
 warning are the recorded proxies. A future benchmark should add a renderer-level
 probe before both comparison builds so the threshold can be measured honestly.
+
+## Chicago Fabric & Street Commerce Corrective Pass
+
+### Why the first V4 image was still a campus model
+
+The road-first topology was correct, but the visible projection still treated
+the 26 semantic building containers as 26 literal buildings. The standard
+fixture therefore had a median of one frontage unit per block, 24.5% street
+edge coverage, a 75.5% street-wall gap and no modeled storefronts. Repeated
+cyan strips changed the surface, not the urban relationship.
+
+This corrective pass uses Chicago Loop, the Chicago River / River North and
+Fulton Market as one generative reference system: continuous orthogonal street
+walls, bridges embedded in downtown, historic masonry beside steel-and-glass
+construction, active commercial bases and restrained skyline clusters. It
+does not reproduce Chicago's map, landmarks or real businesses.
+
+### Three-layer contract
+
+The implementation now keeps three explicit layers:
+
+1. The semantic repository layer remains authoritative for 244 visible files,
+   six components, symbols, dependencies, evidence and journeys.
+2. The spatial city layer projects those facts into streets, blocks, semantic
+   building complexes, frontage parcels, architectural envelopes and volumes.
+3. The structural urban-program layer adds non-evidentiary storefronts,
+   lobbies, awnings, canopies and fictional signs. They never enter semantic
+   counts or intercept repository selection.
+
+The existing 26 `UrbanBuildingEnvelope` values remain semantic address
+containers. The 72 `UrbanArchitecturalEnvelope` values are readable physical
+buildings sharing those containers. Their 213 massing volumes provide base,
+shoulder, shaft, setback, crown and roof-house composition. This increases
+density without returning to one file per building or inventing filler files.
+
+### Character zones and perimeter subdivision
+
+`UrbanBlock.characterZone` is assigned from stable spatial context, not
+component color:
+
+- **Loop Core**: continuous office walls, Miesian grids, Chicago School
+  masonry and selective setbacks.
+- **River North**: terrace mid-rises, corner towers and glass/metal/masonry
+  bases framing the typed river and bridge approaches.
+- **Fulton Market**: lower brick warehouses, narrow storefront rows,
+  loading-bay retail rhythm and occasional glass additions.
+- **Civic Anchor**: one importance-supported public block with a symmetrical
+  entrance and a single true landmark envelope.
+
+Each block is split into four deterministic corner/frontage parcels. Paired
+north/south and east/west frontages form a continuous perimeter while a narrow
+paved cross preserves a service alley/courtyard. Envelopes are distributed
+across the block's real semantic building complexes. Tiny repositories apply
+the rule only to blocks with a semantic building; visible volumes may multiply,
+but evidence-bearing buildings are never fabricated. An empty semantic city
+produces no decorative repository buildings.
+
+Architecture varies with zone, corner, river proximity and stable seed. A seed
+override changes architecture while preserving component blocks and file
+addresses. There is no uncontrolled `Math.random`; plan generation remains
+pure, serializable and memoized by semantic input in the application.
+
+### Massing, facade and commerce grammar
+
+The fixture exercises ten massing profiles and nine geometric facade families:
+
+- Chicago School masonry office;
+- Miesian steel-and-glass grid;
+- blue-green contemporary curtain wall;
+- bronze vertical-fin modernism;
+- Fulton brick warehouse;
+- narrow storefront row;
+- Art Deco setback composition;
+- civic / institutional frontage;
+- riverfront terrace building.
+
+The renderer keeps shared instanced groups for shells, wings, roofs, glazing,
+accents and details. Punched masonry bays, piers, industrial spandrels,
+cornices, terrace slabs and parapets create geometric differences rather than
+enum-only styles. No React component or unique material is created per window.
+
+The curtain-wall kit provides smoked glass with a dark Miesian grid,
+blue-green panels with light framing, and bronze/charcoal panels with stronger
+vertical fins. Mullions, floor spandrels, panel bays, double-height commercial
+bases and roof screens reuse shared primitive geometry. Upper panels avoid
+expensive per-window transparency; warm emissive glazing is shared at night.
+
+The non-semantic commerce layer contains 143 storefront/lobby instances from
+ten categories: corner café, bookshop, neighborhood grocer, design studio,
+music room, bakery, repair shop, gallery, restaurant and hotel lobby. Curated
+fictional labels such as “Canal Cafe”, “Lake Books” and “Grid Studio” exist only
+in this layer. Glazing, fascia signs, awnings, blade signs and entrances align
+to real frontage edges.
+
+Primary architecture uses shared brick, terra-cotta, limestone, concrete,
+dark metal, bronze and blue-green glass. Component colors are absent from wall,
+roof, ground and curtain-wall material slots; they remain limited to selection
+perimeters and evidence highlights.
+
+### Morphology metrics and results
+
+Metrics are pure spatial calculations in `urban-fabric.ts`:
+
+- frontage coverage = qualifying architectural frontage / developed perimeter;
+- street-wall gap = one minus coverage after the deliberate service gap;
+- active ground floor = active storefront/lobby width / eligible frontage;
+- generic lawn ratio = untyped core grass / developable block area;
+- adjacent diversity compares facade, material, cornice band and massing/roof,
+  counting pairs with at least two differences;
+- landmark ratio = tagged landmarks / architectural envelopes.
+
+| Metric | First V4 projection | Corrective result |
+| --- | ---: | ---: |
+| streets / bridges / blocks | 18 / 2 / 18 | 18 / 2 / 18 |
+| semantic building complexes | 26 | 26 |
+| architectural envelopes | 26 | 72 |
+| massing primitives / volumes | 86 estimated | 213 planned |
+| facade/storefront instances | cyan strips / 0 | 6,038 / 143 |
+| median frontage units per block | 1 | 4 |
+| citywide frontage coverage | 24.5% | 89.4% |
+| citywide street-wall gap | 75.5% | 10.6% |
+| active ground floor | 0% | 71.0% |
+| Fulton active ground floor | 0% | 72.0% |
+| generic core lawn | 7.4% | 0% |
+| diverse adjacent pairs | not modeled | 94.4% |
+| landmark share | 3.8% of semantic envelopes | 1.4% of architecture |
+
+| Zone | Blocks | Frontage | Gap | Active ground floor |
+| --- | ---: | ---: | ---: | ---: |
+| Loop Core | 5 | 90.0% | 10.0% | 72.0% |
+| River North | 6 | 90.0% | 10.0% | 72.0% |
+| Fulton Market | 6 | 88.2% | 11.8% | 72.0% |
+| Civic Anchor | 1 | 90.0% | 10.0% | 54.0% |
+
+### Semantic and route invariants
+
+All 244 visible files still resolve to a component, semantic building complex,
+parcel and sidewalk entrance. Architectural envelopes reference real semantic
+building IDs; storefront IDs never appear in `entityAddresses`. Selecting an
+envelope resolves the semantic building's primary file. Component selection
+highlights all three connected blocks and all 12 visible envelopes associated
+with that component. The inspector still exposes module/file metadata,
+relations, history and export symbols.
+
+Journey steps 8, 9 and 10 retain IDs, labels, evidence IDs, station order,
+token cohorts and semantic endpoints. Land coordinates remain projected to the
+public road and bridge graph; the typed artifact boat leg retains its authorized
+water points. The corrective pass adds no traffic, crowd, boat or runtime
+activity simulation.
+
+### Performance and measurement limits
+
+For the exact 244-visible-file fixture, 200 warmed Node runs of the complete
+spatial plus facade planner measured 1.805 ms median, 3.067 ms p95 and 5.439 ms
+maximum. The serializable plan is 261,473 bytes. Static detail remains grouped
+into existing instanced material layers plus one instanced 72-envelope hit
+target; planning runs only when semantic input or seed changes.
+
+A development probe exposes draw calls, triangles, programs, frame time and
+city population through `window.__REPOCITY_RENDER_METRICS__` in a normal
+browser. The in-app automation evaluation realm again lacked a page
+`requestAnimationFrame` and could not see the page's window property. A valid
+fixed-camera median frame time, draw-call and triangle sample could not be
+collected, so the requested 15% frame-time target is **not claimed**. Production
+build, rendered-web tests and bounded instance counts are supporting checks,
+not a replacement for the missing comparison.
+
+### Visual iteration record
+
+All images use the same 1280×720 in-app browser viewport:
+
+- [corrective before](./screenshots/chicago-corrective-before-overview.png)
+- [pass A — density and street wall](./screenshots/chicago-corrective-pass-a.png)
+- [pass B — facades and storefronts](./screenshots/chicago-corrective-pass-b.png)
+- [pass C — materials and night hierarchy](./screenshots/chicago-corrective-pass-c.png)
+- [final default overview](./screenshots/chicago-corrective-final-overview.png)
+- [river and bridge corridor](./screenshots/chicago-river-bridge-corridor.png)
+- [Loop street canyon](./screenshots/chicago-loop-street-canyon.png)
+- [Fulton Market commerce](./screenshots/chicago-fulton-market-street.png)
+- [curtain-wall close view](./screenshots/chicago-curtain-wall-close.png)
+- [multi-block selection](./screenshots/chicago-selected-component.png)
+- [building/export drill-down](./screenshots/chicago-building-symbol-drilldown.png)
+- [preserved evidence journey](./screenshots/chicago-evidence-journey.png)
+
+### Reserved for Semantic Zoom V5
+
+V5 should reveal the hierarchy inside a selected semantic building complex:
+module/file-group floors, file rooms, symbol/export workstations and focused
+dependency routes. It should reuse the new architecture-to-semantic mapping,
+add distance-aware facade simplification and collect a real renderer benchmark
+in a standard browser. Ambient crowds, fake traffic, weather and decorative
+boats remain outside scope unless future repository evidence justifies them.
+
+The corrective result expands the application-library suite to 77 passing
+tests, including 13 focused urban-fabric tests. Final lint, typecheck, full
+workspace tests, production build, rendered-HTML tests and `npm run check` all
+pass. The pre-existing large-client-chunk and Vinext route-classification
+warnings remain unchanged.
