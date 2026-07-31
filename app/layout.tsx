@@ -40,8 +40,8 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [
         {
           url: socialImage,
-          width: 1734,
-          height: 907,
+          width: 1200,
+          height: 628,
           alt: "RepoCity 零号城 — 一座由代码长成的城市",
         },
       ],

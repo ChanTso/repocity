@@ -2,11 +2,17 @@
 
 import {
   Canvas,
-  type ThreeEvent,
   useFrame,
   useThree,
 } from "@react-three/fiber";
-import { Edges, Html, Line, OrbitControls } from "@react-three/drei";
+import {
+  Edges,
+  Html,
+  Line,
+  OrbitControls,
+  Sky,
+  Stars,
+} from "@react-three/drei";
 import {
   type CSSProperties,
   type ComponentRef,
@@ -20,69 +26,91 @@ import {
 } from "react";
 import * as THREE from "three";
 import {
-  calculateCityBounds,
-  CITY_BUILDING_ROLES,
   CITY_ROLE_VISUALS,
   CITY_SCENE_COLORS,
   clampCityValue,
-  getRoleBuildingColor,
   isRelationVisibleAtCommit,
   normalizeCityRole,
-  resolveCityDistricts,
   resolveEntityVisualState,
   stableCityHash,
-  type CityBounds,
-  type CityBuildingRole,
   type CityDistrictInput,
   type CityEntityFrameState,
   type CityVisualEntity,
   type CityVisualRelation,
-  type ResolvedCityDistrict,
   type ResolvedEntityVisualState,
 } from "@/app/lib/city-visuals";
+import {
+  planLivingCity,
+  type CityPoint,
+  type LivingCityPlan,
+  type PlannedBuilding,
+} from "@/app/lib/living-city";
+import type { SemanticFlowProjection } from "@/app/lib/semantic-flow";
+import type { SemanticCityPlan } from "@/app/lib/semantic-city";
+import {
+  getFacilityLabel,
+  LivingCityBuildings,
+} from "./city/LivingCityBuildings";
+import {
+  FlowJourneyLayer,
+  type FlowJourneyView,
+} from "./city/FlowJourneyLayer";
+import { LivingCityInfrastructure } from "./city/LivingCityInfrastructure";
+import { LivingCityMobility } from "./city/LivingCityMobility";
+import { SemanticMetropolis } from "./city/SemanticMetropolis";
+import {
+  BLOCK_TOP_Y,
+  BUILDING_BASE_Y,
+  getLivingCityBounds,
+  getSunPosition,
+  getTimeOfDayPalette,
+  type LivingCityRenderBounds,
+} from "./city/living-city-render-utils";
 
 export type CitySceneEntity = CityVisualEntity;
 export type CitySceneRelation = CityVisualRelation;
 export type CitySceneDistrict = CityDistrictInput;
 export type CitySceneEntityFrameState = CityEntityFrameState;
 
+const NO_SEMANTIC_MOBILITY = [] as const;
+
 export interface CitySceneProps {
-  /** The stable, all-history entity union produced by the city compiler. */
+  /** Stable, all-history entities. Planning never uses replay-filtered arrays. */
   entities: readonly CitySceneEntity[];
   relations?: readonly CitySceneRelation[];
-  /**
-   * Optional compiler-provided district rectangles. If omitted, padded
-   * rectangles are deterministically derived from the entities.
-   */
   districts?: readonly CitySceneDistrict[];
-  /**
-   * Omit/null for HEAD exploration. A number switches to replay semantics:
-   * bornAt is inclusive and diedAt is exclusive.
-   */
+  /** Reuse a caller-owned deterministic plan when it is already available. */
+  cityPlan?: LivingCityPlan;
+  /** Component-first L0 projection used by the Flow experience. */
+  semanticCityPlan?: SemanticCityPlan;
+  /** Explicit journey agents projected onto semantic infrastructure. */
+  semanticFlowProjection?: SemanticFlowProjection | null;
   commitIndex?: number | null;
-  /**
-   * Optional exact replay state from a keyframe/delta reducer. The renderer
-   * otherwise uses a deterministic height approximation.
-   */
   entityFrameStates?: Readonly<Record<string, CitySceneEntityFrameState>>;
-  /** Entity IDs changed by the current commit; these receive a renovation pulse. */
   changedEntityIds?: readonly string[] | ReadonlySet<string>;
-  /** Controlled selection. Leave undefined to use the component's local selection. */
   selectedEntityId?: string | null;
   defaultSelectedEntityId?: string | null;
   onSelectEntity?: (entityId: string) => void;
   onClearSelection?: () => void;
   onHoverEntity?: (entityId: string | null) => void;
   onFocusEntity?: (entityId: string) => void;
-  /**
-   * Changing this value flies the camera to that building. Double-click and F
-   * issue the same focus request internally.
-   */
   focusEntityId?: string | null;
-  /** Follow the first changed, visible building as commitIndex advances. */
   followConstruction?: boolean;
   showDistrictLabels?: boolean;
   showEntityLabel?: boolean;
+  /** District filters hide buildings and labels, but preserve city geography. */
+  hiddenDistrictIds?: readonly string[] | ReadonlySet<string>;
+  /** Replay reducer output. If omitted, all time-visible relations are eligible. */
+  activeRelationIds?: readonly string[] | ReadonlySet<string>;
+  /** Local solar hour, 0...24. */
+  timeOfDay?: number;
+  showTraffic?: boolean;
+  showPedestrians?: boolean;
+  showWaterTraffic?: boolean;
+  flowJourney?: FlowJourneyView | null;
+  flowFollow?: boolean;
+  flowStepIndex?: number;
+  flowPlaying?: boolean;
   className?: string;
   style?: CSSProperties;
   ariaLabel?: string;
@@ -94,41 +122,20 @@ interface FocusRequest {
   nonce: number;
 }
 
-interface SceneContentsProps {
-  entities: readonly CitySceneEntity[];
-  relations: readonly CitySceneRelation[];
-  districts: readonly ResolvedCityDistrict[];
-  bounds: CityBounds;
-  commitIndex?: number | null;
-  entityFrameStates?: Readonly<Record<string, CitySceneEntityFrameState>>;
-  changedEntityIds: ReadonlySet<string>;
-  pulseSignature: string;
-  selectedEntityId: string | null;
-  hoveredEntityId: string | null;
-  internalFocusRequest: FocusRequest | null;
-  externalFocusEntityId?: string | null;
-  followFocusRequest: FocusRequest | null;
-  showDistrictLabels: boolean;
-  showEntityLabel: boolean;
-  emptyState?: ReactNode;
-  onHoverEntity: (entityId: string | null) => void;
-  onSelectEntity: (entityId: string) => void;
-  onFocusEntity: (entityId: string) => void;
-}
-
-const BUILDING_BASE_Y = 0.13;
-const HIDDEN_SCALE = 0.00001;
-
 /**
- * Instanced 3D code city with stable picking and replay-aware visuals.
+ * A deterministic city-simulation view over repository facts.
  *
- * The Canvas lives inside a plain responsive div, so callers only need to size
- * this component; no Three.js objects escape into application state.
+ * The plan is derived from complete history data once. Replay and UI filters
+ * only alter runtime height, visibility and dependency overlays, so roads,
+ * districts, bridges and camera framing never jump between commits.
  */
 export function CityScene({
   entities,
   relations = [],
-  districts: districtInputs,
+  districts = [],
+  cityPlan,
+  semanticCityPlan,
+  semanticFlowProjection,
   commitIndex,
   entityFrameStates,
   changedEntityIds = [],
@@ -142,6 +149,16 @@ export function CityScene({
   followConstruction = false,
   showDistrictLabels = true,
   showEntityLabel = true,
+  hiddenDistrictIds = [],
+  activeRelationIds,
+  timeOfDay = 14,
+  showTraffic = true,
+  showPedestrians = true,
+  showWaterTraffic = true,
+  flowJourney = null,
+  flowFollow = false,
+  flowStepIndex = 0,
+  flowPlaying = false,
   className,
   style,
   ariaLabel = "Interactive 3D repository city",
@@ -150,20 +167,52 @@ export function CityScene({
   const [localSelectedEntityId, setLocalSelectedEntityId] = useState<
     string | null
   >(defaultSelectedEntityId);
-  const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(null);
+  const [hoveredEntityId, setHoveredEntityId] = useState<string | null>(
+    null,
+  );
   const hoveredEntityIdRef = useRef<string | null>(null);
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(() =>
-    focusEntityId ? { entityId: focusEntityId, nonce: 1 } : null,
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(
+    () =>
+      focusEntityId
+        ? { entityId: focusEntityId, nonce: 1 }
+        : null,
   );
   const selectedEntityId =
     controlledSelectedEntityId === undefined
       ? localSelectedEntityId
       : controlledSelectedEntityId;
 
-  const bounds = useMemo(() => calculateCityBounds(entities), [entities]);
-  const districts = useMemo(
-    () => resolveCityDistricts(entities, districtInputs),
-    [districtInputs, entities],
+  const plan = useMemo(
+    () =>
+      cityPlan ??
+      planLivingCity({
+        entities,
+        relations,
+        districts: districts.map((district) => ({
+          id: district.id,
+          name: district.name ?? district.label ?? district.id,
+          color: district.color,
+        })),
+      }),
+    [cityPlan, districts, entities, relations],
+  );
+  const bounds = useMemo(
+    () =>
+      flowJourney && semanticCityPlan
+        ? getSemanticMetropolisBounds(semanticCityPlan)
+        : getLivingCityBounds(plan),
+    [flowJourney, plan, semanticCityPlan],
+  );
+  const hiddenDistrictSet = useMemo(
+    () => new Set<string>(hiddenDistrictIds),
+    [hiddenDistrictIds],
+  );
+  const activeRelationSet = useMemo(
+    () =>
+      activeRelationIds === undefined
+        ? null
+        : new Set<string>(activeRelationIds),
+    [activeRelationIds],
   );
   const changedIds = useMemo(() => {
     const result = new Set<string>(changedEntityIds);
@@ -190,7 +239,6 @@ export function CityScene({
     },
     [controlledSelectedEntityId, onClearSelection, onSelectEntity],
   );
-
   const hoverEntity = useCallback(
     (entityId: string | null) => {
       if (hoveredEntityIdRef.current === entityId) return;
@@ -200,7 +248,6 @@ export function CityScene({
     },
     [onHoverEntity],
   );
-
   const requestFocus = useCallback(
     (entityId: string) => {
       setFocusRequest((current) => ({
@@ -220,15 +267,19 @@ export function CityScene({
     ) {
       return null;
     }
-    const changedEntity = entities.find(
-      (entity) =>
-        changedIds.has(entity.id) &&
-        resolveEntityVisualState(
-          entity,
-          commitIndex,
-          entityFrameStates?.[entity.id],
-        ).visible,
-    );
+    const changedEntity = entities.find((entity) => {
+      if (
+        !changedIds.has(entity.id) ||
+        hiddenDistrictSet.has(entity.districtId)
+      ) {
+        return false;
+      }
+      return resolveEntityVisualState(
+        entity,
+        commitIndex,
+        entityFrameStates?.[entity.id],
+      ).visible;
+    });
     return changedEntity
       ? { entityId: changedEntity.id, nonce: commitIndex + 1 }
       : null;
@@ -238,6 +289,7 @@ export function CityScene({
     entities,
     entityFrameStates,
     followConstruction,
+    hiddenDistrictSet,
   ]);
 
   useEffect(() => {
@@ -247,10 +299,10 @@ export function CityScene({
       }
       const target = event.target;
       if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
+        target instanceof Element &&
+        target.closest(
+          'button, a, input, select, textarea, [role="button"], [contenteditable="true"]',
+        )
       ) {
         return;
       }
@@ -259,17 +311,16 @@ export function CityScene({
         requestFocus(selectedEntityId);
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [requestFocus, selectedEntityId]);
 
   const initialCameraPosition = useMemo<[number, number, number]>(() => {
-    const distance = Math.max(12, bounds.radius * 1.45);
+    const distance = Math.max(18, bounds.radius * 1.32);
     return [
-      bounds.centerX + distance * 0.82,
-      Math.max(bounds.maxHeight * 1.05, distance * 0.72),
-      bounds.centerZ + distance * 0.82,
+      bounds.centerX + distance * 0.78,
+      Math.max(bounds.maxHeight * 0.88, distance * 0.64),
+      bounds.centerZ + distance * 0.86,
     ];
   }, [bounds]);
 
@@ -278,7 +329,7 @@ export function CityScene({
       aria-label={ariaLabel}
       className={className}
       onPointerLeave={() => hoverEntity(null)}
-      role="img"
+      role="region"
       style={{
         position: "relative",
         width: "100%",
@@ -286,16 +337,16 @@ export function CityScene({
         minHeight: 320,
         overflow: "hidden",
         cursor: hoveredEntityId ? "pointer" : "grab",
-        background: CITY_SCENE_COLORS.background,
+        background: getTimeOfDayPalette(timeOfDay).background,
         ...style,
       }}
     >
       <Canvas
         camera={{
           position: initialCameraPosition,
-          fov: 40,
+          fov: 42,
           near: 0.1,
-          far: Math.max(400, bounds.radius * 16),
+          far: Math.max(480, bounds.radius * 18),
         }}
         dpr={[1, 1.5]}
         gl={{
@@ -310,25 +361,37 @@ export function CityScene({
         shadows
       >
         <SceneContents
+          activeRelationIds={activeRelationSet}
           bounds={bounds}
           changedEntityIds={changedIds}
           commitIndex={commitIndex}
-          districts={districts}
           emptyState={emptyState}
           entities={entities}
           entityFrameStates={entityFrameStates}
           externalFocusEntityId={focusEntityId}
           followFocusRequest={followFocusRequest}
+          flowJourney={flowJourney}
+          flowFollow={flowFollow}
+          flowPlaying={flowPlaying}
+          flowStepIndex={flowStepIndex}
+          hiddenDistrictIds={hiddenDistrictSet}
           hoveredEntityId={hoveredEntityId}
           internalFocusRequest={focusRequest}
           onFocusEntity={requestFocus}
           onHoverEntity={hoverEntity}
           onSelectEntity={(entityId) => selectEntity(entityId)}
+          plan={plan}
+          semanticCityPlan={semanticCityPlan}
+          semanticFlowProjection={semanticFlowProjection}
           pulseSignature={pulseSignature}
           relations={relations}
           selectedEntityId={selectedEntityId ?? null}
           showDistrictLabels={showDistrictLabels}
           showEntityLabel={showEntityLabel}
+          showPedestrians={showPedestrians}
+          showTraffic={showTraffic}
+          showWaterTraffic={showWaterTraffic}
+          timeOfDay={timeOfDay}
         />
       </Canvas>
     </div>
@@ -337,11 +400,113 @@ export function CityScene({
 
 export default CityScene;
 
+interface SceneContentsProps {
+  plan: LivingCityPlan;
+  semanticCityPlan?: SemanticCityPlan;
+  semanticFlowProjection?: SemanticFlowProjection | null;
+  bounds: LivingCityRenderBounds;
+  entities: readonly CitySceneEntity[];
+  relations: readonly CitySceneRelation[];
+  commitIndex?: number | null;
+  entityFrameStates?: Readonly<Record<string, CitySceneEntityFrameState>>;
+  changedEntityIds: ReadonlySet<string>;
+  pulseSignature: string;
+  selectedEntityId: string | null;
+  hoveredEntityId: string | null;
+  internalFocusRequest: FocusRequest | null;
+  externalFocusEntityId?: string | null;
+  followFocusRequest: FocusRequest | null;
+  hiddenDistrictIds: ReadonlySet<string>;
+  activeRelationIds: ReadonlySet<string> | null;
+  showDistrictLabels: boolean;
+  showEntityLabel: boolean;
+  showTraffic: boolean;
+  showPedestrians: boolean;
+  showWaterTraffic: boolean;
+  flowJourney: FlowJourneyView | null;
+  flowFollow: boolean;
+  flowStepIndex: number;
+  flowPlaying: boolean;
+  timeOfDay: number;
+  emptyState?: ReactNode;
+  onHoverEntity: (entityId: string | null) => void;
+  onSelectEntity: (entityId: string) => void;
+  onFocusEntity: (entityId: string) => void;
+}
+
+interface JourneyCameraFocus {
+  key: string;
+  points: CityPoint[];
+  focusPoint: CityPoint;
+}
+
+function getSemanticMetropolisBounds(
+  plan: SemanticCityPlan,
+): LivingCityRenderBounds {
+  if (plan.campuses.length === 0) {
+    const radius = Math.max(
+      12,
+      Math.hypot(plan.bounds.width, plan.bounds.depth) / 2,
+    );
+    return {
+      minX: plan.bounds.minX,
+      maxX: plan.bounds.maxX,
+      minZ: plan.bounds.minZ,
+      maxZ: plan.bounds.maxZ,
+      centerX: plan.bounds.x,
+      centerZ: plan.bounds.z,
+      width: plan.bounds.width,
+      depth: plan.bounds.depth,
+      maxHeight: 8,
+      radius,
+    };
+  }
+
+  const margin = 7;
+  const xValues = plan.campuses.flatMap((campus) => [
+    campus.x - campus.width * 0.72,
+    campus.x + campus.width * 0.72,
+  ]);
+  const zValues = plan.campuses.flatMap((campus) => [
+    campus.z - campus.depth * 0.72,
+    campus.z + campus.depth * 0.72,
+  ]);
+  for (const corridor of plan.corridors) {
+    for (const point of corridor.points) {
+      xValues.push(point.x);
+      zValues.push(point.z);
+    }
+  }
+  const minX = Math.min(...xValues) - margin;
+  const maxX = Math.max(...xValues) + margin;
+  const minZ = Math.min(...zValues) - margin;
+  const maxZ = Math.max(...zValues) + margin;
+  const width = maxX - minX;
+  const depth = maxZ - minZ;
+  return {
+    minX,
+    maxX,
+    minZ,
+    maxZ,
+    centerX: (minX + maxX) / 2,
+    centerZ: (minZ + maxZ) / 2,
+    width,
+    depth,
+    maxHeight: Math.max(
+      8,
+      ...plan.campuses.map((campus) => campus.height),
+    ),
+    radius: Math.max(16, Math.hypot(width, depth) / 2),
+  };
+}
+
 function SceneContents({
+  plan,
+  semanticCityPlan,
+  semanticFlowProjection,
+  bounds,
   entities,
   relations,
-  districts,
-  bounds,
   commitIndex,
   entityFrameStates,
   changedEntityIds,
@@ -351,17 +516,178 @@ function SceneContents({
   internalFocusRequest,
   externalFocusEntityId,
   followFocusRequest,
+  hiddenDistrictIds,
+  activeRelationIds,
   showDistrictLabels,
   showEntityLabel,
+  showTraffic,
+  showPedestrians,
+  showWaterTraffic,
+  flowJourney,
+  flowFollow,
+  flowStepIndex,
+  flowPlaying,
+  timeOfDay,
   emptyState,
   onHoverEntity,
   onSelectEntity,
   onFocusEntity,
 }: SceneContentsProps) {
+  const palette = useMemo(
+    () => getTimeOfDayPalette(timeOfDay),
+    [timeOfDay],
+  );
+  const sunPosition = useMemo(
+    () => getSunPosition(timeOfDay, bounds),
+    [bounds, timeOfDay],
+  );
   const entityById = useMemo(
     () => new Map(entities.map((entity) => [entity.id, entity])),
     [entities],
   );
+  const journeyPlan = useMemo<LivingCityPlan>(() => {
+    if (!flowJourney || !semanticCityPlan) return plan;
+    const slotByEntityId = new Map(
+      semanticCityPlan.campuses.flatMap((campus) =>
+        campus.fileSlots.map(
+          (slot) => [slot.entityId, slot] as const,
+        ),
+      ),
+    );
+    return {
+      ...plan,
+      // Semantic water is rendered from typed boundaries. The Flow layer must
+      // not fall back to the legacy decorative river heuristic.
+      geography: { river: null },
+      buildings: plan.buildings.map((building) => {
+        const address =
+          semanticCityPlan.entityAddresses[building.entityId];
+        const slot = slotByEntityId.get(building.entityId);
+        if (!address || !slot) return building;
+        return {
+          ...building,
+          x: address.worldPoint.x,
+          z: address.worldPoint.z,
+          width: Math.max(1.2, Math.min(3.2, slot.width * 2.6)),
+          depth: Math.max(1.2, Math.min(3.2, slot.depth * 2.6)),
+          frontage: {
+            ...building.frontage,
+            point: { ...address.worldPoint },
+          },
+        };
+      }),
+    };
+  }, [flowJourney, plan, semanticCityPlan]);
+  const projectedFlowJourney = useMemo<FlowJourneyView | null>(() => {
+    if (!flowJourney || !semanticFlowProjection) return flowJourney;
+    return {
+      ...flowJourney,
+      legs: flowJourney.legs.map((leg) => ({
+        ...leg,
+        points: [
+          ...(semanticFlowProjection.legPoints[leg.id] ?? []),
+        ],
+      })),
+    };
+  }, [flowJourney, semanticFlowProjection]);
+  const buildingByEntityId = useMemo(
+    () =>
+      new Map(
+        journeyPlan.buildings.map((building) => [
+          building.entityId,
+          building,
+        ]),
+      ),
+    [journeyPlan],
+  );
+  const flowEntityIds = useMemo(
+    () =>
+      flowJourney
+        ? new Set(flowJourney.steps.map((step) => step.entityId))
+        : null,
+    [flowJourney],
+  );
+  const activeFlowEntityIds = useMemo(() => {
+    if (!flowJourney || flowJourney.steps.length === 0) return null;
+    const safeIndex = Math.max(
+      0,
+      Math.min(flowJourney.steps.length - 1, flowStepIndex),
+    );
+    return new Set([flowJourney.steps[safeIndex]!.entityId]);
+  }, [flowJourney, flowStepIndex]);
+  const flowComponentIds = useMemo(() => {
+    if (!semanticCityPlan || !flowEntityIds) return null;
+    const ids = new Set<string>();
+    for (const entityId of flowEntityIds) {
+      const componentId =
+        semanticCityPlan.entityAddresses[entityId]?.componentId;
+      if (componentId) ids.add(componentId);
+    }
+    return ids;
+  }, [flowEntityIds, semanticCityPlan]);
+  const journeyCameraFocus = useMemo<JourneyCameraFocus | null>(() => {
+    if (
+      !projectedFlowJourney ||
+      !flowFollow ||
+      projectedFlowJourney.steps.length === 0
+    ) {
+      return null;
+    }
+    const safeStepIndex = Math.max(
+      0,
+      Math.min(projectedFlowJourney.steps.length - 1, flowStepIndex),
+    );
+    const activeStep = projectedFlowJourney.steps[safeStepIndex]!;
+    let activeLegs = projectedFlowJourney.legs.filter(
+      (leg) => leg.targetEntityId === activeStep.entityId,
+    );
+    if (activeLegs.length === 0 && safeStepIndex === 0) {
+      activeLegs = projectedFlowJourney.legs.filter(
+        (leg) => leg.sourceEntityId === activeStep.entityId,
+      );
+    }
+    const points: CityPoint[] = [];
+    const legIds: string[] = [];
+    for (const leg of activeLegs) {
+      const source = buildingByEntityId.get(leg.sourceEntityId);
+      const target = buildingByEntityId.get(leg.targetEntityId);
+      if (
+        !source ||
+        !target ||
+        hiddenDistrictIds.has(source.districtId) ||
+        hiddenDistrictIds.has(target.districtId)
+      ) {
+        continue;
+      }
+      legIds.push(leg.id);
+      points.push(
+        { x: source.x, z: source.z },
+        ...leg.points.map((point) => ({ x: point.x, z: point.z })),
+        { x: target.x, z: target.z },
+      );
+    }
+    if (points.length === 0) {
+      const building = buildingByEntityId.get(activeStep.entityId);
+      if (!building || hiddenDistrictIds.has(building.districtId)) {
+        return null;
+      }
+      points.push({ x: building.x, z: building.z });
+    }
+    return {
+      key: `${projectedFlowJourney.id}:${safeStepIndex}:${legIds.sort().join(",")}`,
+      points,
+      focusPoint: {
+        x: buildingByEntityId.get(activeStep.entityId)?.x ?? points[0]!.x,
+        z: buildingByEntityId.get(activeStep.entityId)?.z ?? points[0]!.z,
+      },
+    };
+  }, [
+    buildingByEntityId,
+    flowFollow,
+    flowStepIndex,
+    hiddenDistrictIds,
+    projectedFlowJourney,
+  ]);
   const visualStates = useMemo(() => {
     const states = new Map<string, ResolvedEntityVisualState>();
     for (const entity of entities) {
@@ -376,151 +702,216 @@ function SceneContents({
     }
     return states;
   }, [commitIndex, entities, entityFrameStates]);
-  const roleBatches = useMemo(() => {
-    const batches = Object.fromEntries(
-      CITY_BUILDING_ROLES.map((role) => [role, [] as CitySceneEntity[]]),
-    ) as Record<CityBuildingRole, CitySceneEntity[]>;
 
-    for (const entity of entities) {
-      batches[normalizeCityRole(entity.role)].push(entity);
-    }
-    for (const role of CITY_BUILDING_ROLES) {
-      batches[role].sort((left, right) => left.id.localeCompare(right.id));
-    }
-    return batches;
-  }, [entities]);
+  const isRenderable = useCallback(
+    (entityId: string) => {
+      const building = buildingByEntityId.get(entityId);
+      return Boolean(
+        building &&
+          visualStates.get(entityId)?.visible &&
+          !hiddenDistrictIds.has(building.districtId),
+      );
+    },
+    [buildingByEntityId, hiddenDistrictIds, visualStates],
+  );
+  const targetHeight = useCallback(
+    (entityId: string) => {
+      const building = buildingByEntityId.get(entityId);
+      const state = visualStates.get(entityId);
+      return building && state && isRenderable(entityId)
+        ? building.height * state.heightRatio
+        : 0;
+    },
+    [buildingByEntityId, isRenderable, visualStates],
+  );
 
   const labelEntity = useMemo(() => {
-    const hovered = hoveredEntityId
-      ? entityById.get(hoveredEntityId)
+    if (hoveredEntityId && isRenderable(hoveredEntityId)) {
+      return entityById.get(hoveredEntityId);
+    }
+    if (selectedEntityId && isRenderable(selectedEntityId)) {
+      return entityById.get(selectedEntityId);
+    }
+    return undefined;
+  }, [
+    entityById,
+    hoveredEntityId,
+    isRenderable,
+    selectedEntityId,
+  ]);
+  const selectedBuilding =
+    selectedEntityId && isRenderable(selectedEntityId)
+      ? buildingByEntityId.get(selectedEntityId)
       : undefined;
-    if (hovered && visualStates.get(hovered.id)?.visible) return hovered;
+  const hoveredBuilding =
+    hoveredEntityId &&
+    hoveredEntityId !== selectedEntityId &&
+    isRenderable(hoveredEntityId)
+      ? buildingByEntityId.get(hoveredEntityId)
+      : undefined;
 
-    const selected = selectedEntityId
-      ? entityById.get(selectedEntityId)
-      : undefined;
-    return selected && visualStates.get(selected.id)?.visible
-      ? selected
-      : undefined;
-  }, [entityById, hoveredEntityId, selectedEntityId, visualStates]);
-  const selectedEntity = selectedEntityId
-    ? entityById.get(selectedEntityId)
-    : undefined;
-  const hoveredEntity = hoveredEntityId
-    ? entityById.get(hoveredEntityId)
-    : undefined;
-
-  const worldSize = Math.max(60, bounds.radius * 4.5);
-  const fogNear = Math.max(28, bounds.radius * 1.7);
-  const fogFar = Math.max(90, bounds.radius * 5.4);
+  const fogNear = Math.max(35, bounds.radius * 1.65);
+  const fogFar = Math.max(110, bounds.radius * 5.2);
 
   return (
     <>
-      <color attach="background" args={[CITY_SCENE_COLORS.background]} />
-      <fog attach="fog" args={[CITY_SCENE_COLORS.fog, fogNear, fogFar]} />
+      <color attach="background" args={[palette.background]} />
+      <fog attach="fog" args={[palette.fog, fogNear, fogFar]} />
+      {palette.daylight > 0.14 ? (
+        <Sky
+          distance={Math.max(450, bounds.radius * 8)}
+          mieCoefficient={0.0028}
+          mieDirectionalG={0.72}
+          rayleigh={3.1 - palette.sunset * 0.8}
+          sunPosition={sunPosition}
+          turbidity={3.4 + palette.sunset * 3.2}
+        />
+      ) : (
+        <Stars
+          count={1500}
+          depth={40}
+          factor={3}
+          fade
+          radius={Math.max(80, bounds.radius * 2.5)}
+          saturation={0.2}
+          speed={0.1}
+        />
+      )}
       <hemisphereLight
-        args={["#b9d8d2", "#081013", 1.2]}
-        position={[0, bounds.maxHeight + 10, 0]}
+        args={[
+          palette.ambient,
+          "#07100f",
+          0.42 + palette.daylight * 1.05,
+        ]}
+        position={[0, bounds.maxHeight + 12, 0]}
       />
-      <ambientLight color="#6d8d88" intensity={0.32} />
+      <ambientLight
+        color={palette.ambient}
+        intensity={0.12 + palette.daylight * 0.32}
+      />
       <directionalLight
         castShadow
-        color="#ffe4bc"
-        intensity={2.15}
-        position={[
-          bounds.centerX + bounds.radius * 0.8,
-          Math.max(20, bounds.maxHeight * 2.4),
-          bounds.centerZ + bounds.radius * 0.55,
-        ]}
-        shadow-bias={-0.00025}
-        shadow-camera-bottom={-bounds.radius * 1.5}
-        shadow-camera-far={Math.max(80, bounds.radius * 5)}
-        shadow-camera-left={-bounds.radius * 1.5}
-        shadow-camera-right={bounds.radius * 1.5}
-        shadow-camera-top={bounds.radius * 1.5}
-        shadow-mapSize-height={1536}
-        shadow-mapSize-width={1536}
+        color={palette.sun}
+        intensity={0.18 + palette.daylight * 2.35}
+        position={sunPosition}
+        shadow-bias={-0.00028}
+        shadow-camera-bottom={-bounds.radius * 1.15}
+        shadow-camera-far={Math.max(90, bounds.radius * 4)}
+        shadow-camera-left={-bounds.radius * 1.15}
+        shadow-camera-right={bounds.radius * 1.15}
+        shadow-camera-top={bounds.radius * 1.15}
+        shadow-mapSize-height={1024}
+        shadow-mapSize-width={1024}
       />
-
-      <mesh
-        position={[bounds.centerX, -0.08, bounds.centerZ]}
-        receiveShadow
-        rotation={[-Math.PI / 2, 0, 0]}
-      >
-        <planeGeometry args={[worldSize, worldSize]} />
-        <meshStandardMaterial
-          color={CITY_SCENE_COLORS.worldGround}
-          metalness={0}
-          roughness={1}
+      {palette.night > 0.35 ? (
+        <pointLight
+          color="#739bb9"
+          decay={1.5}
+          distance={bounds.radius * 2.2}
+          intensity={palette.night * 1.2}
+          position={[
+            bounds.centerX,
+            bounds.maxHeight + 10,
+            bounds.centerZ,
+          ]}
         />
-      </mesh>
-      <gridHelper
-        args={[
-          worldSize,
-          Math.max(24, Math.round(worldSize / 2)),
-          "#204044",
-          "#102a2d",
-        ]}
-        position={[bounds.centerX, 0.005, bounds.centerZ]}
-      />
+      ) : null}
 
-      <DistrictLayer
-        districts={districts}
-        showLabels={showDistrictLabels}
-      />
-
-      {CITY_BUILDING_ROLES.map((role) => {
-        const items = roleBatches[role];
-        return items.length > 0 ? (
-          <BuildingBatch
-            key={role}
-            bounds={bounds}
+      {flowJourney && semanticCityPlan ? (
+        <SemanticMetropolis
+          activeComponentIds={flowComponentIds}
+          // FlowJourneyLayer is the single renderer for scenario tokens.
+          // Keeping the metropolis fleet empty prevents the same observed
+          // token cohort from becoming an unexplained ambient population.
+          mobilityRoutes={NO_SEMANTIC_MOBILITY}
+          plan={semanticCityPlan}
+          playing={flowPlaying}
+          // Only the currently inspected cutaway owns physical space. Other
+          // journey stops remain lightweight semantic beacons, so a ten-step
+          // tour cannot hollow ten unrelated holes out of the metropolis.
+          reservedEntityIds={activeFlowEntityIds ?? undefined}
+          showPedestrians
+          showTraffic
+          showWaterTraffic
+          timeOfDay={timeOfDay}
+        />
+      ) : (
+        <>
+          <LivingCityInfrastructure
+            hiddenDistrictIds={hiddenDistrictIds}
+            palette={palette}
+            plan={plan}
+            showDistrictLabels={showDistrictLabels}
+          />
+          <LivingCityBuildings
             changedEntityIds={changedEntityIds}
             commitIndex={commitIndex}
+            entityById={entityById}
+            hiddenDistrictIds={hiddenDistrictIds}
             hoveredEntityId={hoveredEntityId}
-            items={items}
             onFocusEntity={onFocusEntity}
             onHoverEntity={onHoverEntity}
             onSelectEntity={onSelectEntity}
+            palette={palette}
+            plan={plan}
             pulseSignature={pulseSignature}
-            role={role}
             selectedEntityId={selectedEntityId}
             visualStates={visualStates}
           />
-        ) : null;
-      })}
+          <LivingCityMobility
+            palette={palette}
+            plan={plan}
+            showPedestrians={showPedestrians}
+            showTraffic={showTraffic}
+            showWaterTraffic={showWaterTraffic}
+          />
+        </>
+      )}
+      {flowJourney ? (
+        <FlowJourneyLayer
+          activeStepIndex={flowStepIndex}
+          hiddenDistrictIds={hiddenDistrictIds}
+          journey={projectedFlowJourney ?? flowJourney}
+          plan={journeyPlan}
+          playing={flowPlaying}
+          strictRouteProjection={Boolean(semanticFlowProjection)}
+        />
+      ) : null}
 
-      <DependencyLines
-        commitIndex={commitIndex}
-        entityById={entityById}
-        relations={relations}
-        selectedEntityId={selectedEntityId}
-        visualStates={visualStates}
-      />
+      {!flowJourney ? (
+        <DependencyLines
+          activeRelationIds={activeRelationIds}
+          buildingByEntityId={buildingByEntityId}
+          commitIndex={commitIndex}
+          isRenderable={isRenderable}
+          relations={relations}
+          selectedEntityId={selectedEntityId}
+          targetHeight={targetHeight}
+        />
+      ) : null}
 
-      {selectedEntity && visualStates.get(selectedEntity.id)?.visible ? (
+      {!flowJourney && selectedBuilding ? (
         <BuildingMarker
+          building={selectedBuilding}
           color={CITY_SCENE_COLORS.selection}
-          entity={selectedEntity}
-          height={visualStates.get(selectedEntity.id)?.height ?? 0}
+          height={targetHeight(selectedBuilding.entityId)}
           kind="selected"
         />
       ) : null}
-      {hoveredEntity &&
-      hoveredEntity.id !== selectedEntity?.id &&
-      visualStates.get(hoveredEntity.id)?.visible ? (
+      {!flowJourney && hoveredBuilding ? (
         <BuildingMarker
+          building={hoveredBuilding}
           color={CITY_SCENE_COLORS.hover}
-          entity={hoveredEntity}
-          height={visualStates.get(hoveredEntity.id)?.height ?? 0}
+          height={targetHeight(hoveredBuilding.entityId)}
           kind="hover"
         />
       ) : null}
 
-      {showEntityLabel && labelEntity ? (
+      {!flowJourney && showEntityLabel && labelEntity ? (
         <EntityLabel
+          building={buildingByEntityId.get(labelEntity.id)!}
           entity={labelEntity}
-          height={visualStates.get(labelEntity.id)?.height ?? 0}
+          height={targetHeight(labelEntity.id)}
           selected={labelEntity.id === selectedEntityId}
         />
       ) : null}
@@ -533,382 +924,37 @@ function SceneContents({
 
       <CameraRig
         bounds={bounds}
-        cityKey={`${entities.length}:${entities[0]?.id ?? "empty"}:${entities.at(-1)?.id ?? "empty"}`}
-        entityById={entityById}
+        buildingByEntityId={buildingByEntityId}
+        cityKey={`${semanticCityPlan?.seed ?? plan.seed}:${journeyPlan.buildings.length}`}
         externalFocusEntityId={externalFocusEntityId}
         followFocusRequest={followFocusRequest}
         internalFocusRequest={internalFocusRequest}
-        visualStates={visualStates}
+        isRenderable={isRenderable}
+        journeyFocus={journeyCameraFocus}
+        journeyActive={flowJourney !== null}
+        targetHeight={targetHeight}
       />
     </>
   );
 }
 
-interface BuildingBatchProps {
-  role: CityBuildingRole;
-  items: readonly CitySceneEntity[];
-  visualStates: ReadonlyMap<string, ResolvedEntityVisualState>;
-  bounds: CityBounds;
-  commitIndex?: number | null;
-  changedEntityIds: ReadonlySet<string>;
-  pulseSignature: string;
-  hoveredEntityId: string | null;
-  selectedEntityId: string | null;
-  onHoverEntity: (entityId: string | null) => void;
-  onSelectEntity: (entityId: string) => void;
-  onFocusEntity: (entityId: string) => void;
-}
-
-interface BuildingRuntime {
-  height: number;
-  pulse: number;
-}
-
-function BuildingBatch({
-  role,
-  items,
-  visualStates,
-  bounds,
-  commitIndex,
-  changedEntityIds,
-  pulseSignature,
-  hoveredEntityId,
-  selectedEntityId,
-  onHoverEntity,
-  onSelectEntity,
-  onFocusEntity,
-}: BuildingBatchProps) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const runtimesRef = useRef(new Map<string, BuildingRuntime>());
-  const dummy = useMemo(() => new THREE.Object3D(), []);
-  const workingColor = useMemo(() => new THREE.Color(), []);
-  const pulseColor = useMemo(
-    () => new THREE.Color(CITY_ROLE_VISUALS[role].accent),
-    [role],
-  );
-  const selectionColor = useMemo(
-    () => new THREE.Color(CITY_SCENE_COLORS.selection),
-    [],
-  );
-  const hoverColor = useMemo(
-    () => new THREE.Color(CITY_SCENE_COLORS.hover),
-    [],
-  );
-  const baseColors = useMemo(
-    () =>
-      items.map(
-        (entity) =>
-          new THREE.Color(
-            getRoleBuildingColor(role, entity.layout.styleVariant),
-          ),
-      ),
-    [items, role],
-  );
-
-  const writeInstance = useCallback(
-    (
-      mesh: THREE.InstancedMesh,
-      entity: CitySceneEntity,
-      instanceId: number,
-      height: number,
-      pulseScale: number,
-    ) => {
-      const variant = Math.abs(entity.layout.styleVariant);
-      const footprintScale = 0.94 + (variant % 3) * 0.03;
-      const visibleHeight = Math.max(HIDDEN_SCALE, height);
-      const visibilityScale = clampCityValue(
-        height / Math.max(0.001, entity.layout.maxHeight * 0.05),
-        HIDDEN_SCALE,
-        1,
-      );
-
-      dummy.position.set(
-        entity.layout.x,
-        BUILDING_BASE_Y + visibleHeight / 2,
-        entity.layout.z,
-      );
-      dummy.rotation.set(0, entity.layout.rotationY, 0);
-      dummy.scale.set(
-        Math.max(
-          HIDDEN_SCALE,
-          entity.layout.width *
-            footprintScale *
-            pulseScale *
-            visibilityScale,
-        ),
-        visibleHeight,
-        Math.max(
-          HIDDEN_SCALE,
-          entity.layout.depth *
-            footprintScale *
-            pulseScale *
-            visibilityScale,
-        ),
-      );
-      dummy.updateMatrix();
-      mesh.setMatrixAt(instanceId, dummy.matrix);
-    },
-    [dummy],
-  );
-
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-
-    const activeIds = new Set(items.map((entity) => entity.id));
-    for (const entityId of runtimesRef.current.keys()) {
-      if (!activeIds.has(entityId)) runtimesRef.current.delete(entityId);
-    }
-
-    items.forEach((entity, instanceId) => {
-      const target = visualStates.get(entity.id);
-      let runtime = runtimesRef.current.get(entity.id);
-      if (!runtime) {
-        runtime = {
-          height:
-            commitIndex === undefined || commitIndex === null
-              ? (target?.height ?? entity.layout.maxHeight)
-              : 0,
-          pulse: 0,
-        };
-        runtimesRef.current.set(entity.id, runtime);
-      }
-      writeInstance(mesh, entity, instanceId, runtime.height, 1);
-      mesh.setColorAt(instanceId, baseColors[instanceId]);
-    });
-
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) {
-      mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      mesh.instanceColor.needsUpdate = true;
-    }
-    mesh.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3(
-        bounds.centerX,
-        bounds.maxHeight / 2,
-        bounds.centerZ,
-      ),
-      Math.hypot(bounds.radius, bounds.maxHeight),
-    );
-  }, [
-    baseColors,
-    bounds,
-    commitIndex,
-    items,
-    visualStates,
-    writeInstance,
-  ]);
-
-  useEffect(() => {
-    for (const entity of items) {
-      if (changedEntityIds.has(entity.id)) {
-        const runtime = runtimesRef.current.get(entity.id);
-        if (runtime) runtime.pulse = 1;
-      }
-    }
-    // pulseSignature deliberately includes commitIndex so the same file can
-    // pulse in consecutive commits without rebuilding its instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pulseSignature]);
-
-  useFrame(({ clock }, delta) => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-
-    items.forEach((entity, instanceId) => {
-      const runtime = runtimesRef.current.get(entity.id);
-      const target = visualStates.get(entity.id);
-      if (!runtime || !target) return;
-
-      runtime.height = THREE.MathUtils.damp(
-        runtime.height,
-        target.height,
-        target.visible ? 8.5 : 11,
-        delta,
-      );
-      if (runtime.height < 0.001 && !target.visible) runtime.height = 0;
-      runtime.pulse = Math.max(0, runtime.pulse - delta * 0.82);
-
-      const wave =
-        Math.sin(
-          clock.elapsedTime * 9.5 + (stableCityHash(entity.id) % 31) * 0.17,
-        ) *
-        runtime.pulse;
-      const pulseScale = 1 + Math.max(0, wave) * 0.075;
-      writeInstance(
-        mesh,
-        entity,
-        instanceId,
-        runtime.height,
-        pulseScale,
-      );
-
-      workingColor.copy(baseColors[instanceId]);
-      if (runtime.pulse > 0) {
-        workingColor.lerp(pulseColor, runtime.pulse * (0.42 + wave * 0.12));
-      }
-      if (entity.id === hoveredEntityId) {
-        workingColor.lerp(hoverColor, 0.46);
-      }
-      if (entity.id === selectedEntityId) {
-        workingColor.lerp(selectionColor, 0.52);
-      }
-      mesh.setColorAt(instanceId, workingColor);
-    });
-
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  });
-
-  const entityFromEvent = useCallback(
-    (event: ThreeEvent<PointerEvent | MouseEvent>) => {
-      if (event.instanceId === undefined) return undefined;
-      const entity = items[event.instanceId];
-      return entity && visualStates.get(entity.id)?.visible
-        ? entity
-        : undefined;
-    },
-    [items, visualStates],
-  );
-
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, items.length]}
-      castShadow
-      frustumCulled
-      onClick={(event) => {
-        const entity = entityFromEvent(event);
-        if (!entity) return;
-        event.stopPropagation();
-        onSelectEntity(entity.id);
-      }}
-      onDoubleClick={(event) => {
-        const entity = entityFromEvent(event);
-        if (!entity) return;
-        event.stopPropagation();
-        onSelectEntity(entity.id);
-        onFocusEntity(entity.id);
-      }}
-      onPointerMove={(event) => {
-        const entity = entityFromEvent(event);
-        if (!entity) return;
-        event.stopPropagation();
-        onHoverEntity(entity.id);
-      }}
-      onPointerOut={() => onHoverEntity(null)}
-      receiveShadow
-    >
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial
-        color="#ffffff"
-        emissive={CITY_ROLE_VISUALS[role].emissive}
-        emissiveIntensity={0.2}
-        flatShading
-        metalness={0.06}
-        roughness={0.78}
-      />
-    </instancedMesh>
-  );
-}
-
-function DistrictLayer({
-  districts,
-  showLabels,
-}: {
-  districts: readonly ResolvedCityDistrict[];
-  showLabels: boolean;
-}) {
-  return (
-    <group>
-      {districts.map((district) => (
-        <group key={district.id}>
-          <mesh
-            position={[district.x, 0.055, district.z]}
-            receiveShadow
-          >
-            <boxGeometry
-              args={[district.width, 0.1, district.depth]}
-            />
-            <meshStandardMaterial
-              color={district.color}
-              metalness={0.02}
-              roughness={0.96}
-            />
-            <Edges
-              color={CITY_SCENE_COLORS.districtBorder}
-              opacity={0.64}
-              transparent
-            />
-          </mesh>
-          {showLabels ? (
-            <Html
-              center
-              position={[
-                district.x - district.width / 2 + 0.72,
-                0.34,
-                district.z - district.depth / 2 + 0.52,
-              ]}
-              zIndexRange={[20, 0]}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "5px 8px",
-                  border: "1px solid rgba(137, 176, 167, 0.28)",
-                  borderRadius: 7,
-                  color: CITY_SCENE_COLORS.districtLabel,
-                  background: "rgba(6, 17, 21, 0.82)",
-                  boxShadow: "0 5px 18px rgba(0, 0, 0, 0.24)",
-                  fontFamily:
-                    "var(--font-geist-mono), ui-monospace, monospace",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  lineHeight: 1,
-                  pointerEvents: "none",
-                  textTransform: "uppercase",
-                  userSelect: "none",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <span>{district.name}</span>
-                <span
-                  style={{
-                    color: CITY_SCENE_COLORS.districtLabelMuted,
-                    fontSize: 9,
-                    fontWeight: 600,
-                  }}
-                >
-                  {district.entityCount}
-                </span>
-              </div>
-            </Html>
-          ) : null}
-        </group>
-      ))}
-    </group>
-  );
-}
-
-interface DependencyLinesProps {
-  selectedEntityId: string | null;
-  relations: readonly CitySceneRelation[];
-  entityById: ReadonlyMap<string, CitySceneEntity>;
-  visualStates: ReadonlyMap<string, ResolvedEntityVisualState>;
-  commitIndex?: number | null;
-}
-
 function DependencyLines({
   selectedEntityId,
   relations,
-  entityById,
-  visualStates,
+  buildingByEntityId,
   commitIndex,
-}: DependencyLinesProps) {
+  activeRelationIds,
+  isRenderable,
+  targetHeight,
+}: {
+  selectedEntityId: string | null;
+  relations: readonly CitySceneRelation[];
+  buildingByEntityId: ReadonlyMap<string, PlannedBuilding>;
+  commitIndex?: number | null;
+  activeRelationIds: ReadonlySet<string> | null;
+  isRenderable: (entityId: string) => boolean;
+  targetHeight: (entityId: string) => number;
+}) {
   const visibleRelations = useMemo(() => {
     if (!selectedEntityId) return [];
     return relations.filter((relation) => {
@@ -918,28 +964,33 @@ function DependencyLines({
       ) {
         return false;
       }
-      if (!isRelationVisibleAtCommit(relation, commitIndex)) return false;
+      if (
+        activeRelationIds &&
+        !activeRelationIds.has(relation.id)
+      ) {
+        return false;
+      }
       return (
-        visualStates.get(relation.sourceId)?.visible === true &&
-        visualStates.get(relation.targetId)?.visible === true
+        isRelationVisibleAtCommit(relation, commitIndex) &&
+        isRenderable(relation.sourceId) &&
+        isRenderable(relation.targetId)
       );
     });
-  }, [commitIndex, relations, selectedEntityId, visualStates]);
+  }, [
+    activeRelationIds,
+    commitIndex,
+    isRenderable,
+    relations,
+    selectedEntityId,
+  ]);
 
   return (
     <group>
       {visibleRelations.map((relation) => {
-        const source = entityById.get(relation.sourceId);
-        const target = entityById.get(relation.targetId);
+        const source = buildingByEntityId.get(relation.sourceId);
+        const target = buildingByEntityId.get(relation.targetId);
         if (!source || !target) return null;
-
         const outgoing = relation.sourceId === selectedEntityId;
-        const points = dependencyArcPoints(
-          source,
-          target,
-          visualStates.get(source.id)?.height ?? 0,
-          visualStates.get(target.id)?.height ?? 0,
-        );
         return (
           <Line
             key={relation.id}
@@ -949,9 +1000,18 @@ function DependencyLines({
                 : CITY_SCENE_COLORS.dependencyIn
             }
             depthWrite={false}
-            lineWidth={clampCityValue(1.2 + relation.weight * 0.55, 1.2, 4)}
-            opacity={0.84}
-            points={points}
+            lineWidth={clampCityValue(
+              1.15 + relation.weight * 0.42,
+              1.15,
+              3.6,
+            )}
+            opacity={0.86}
+            points={dependencyArcPoints(
+              source,
+              target,
+              targetHeight(source.entityId),
+              targetHeight(target.entityId),
+            )}
             transparent
           />
         );
@@ -961,20 +1021,20 @@ function DependencyLines({
 }
 
 function dependencyArcPoints(
-  source: CitySceneEntity,
-  target: CitySceneEntity,
+  source: PlannedBuilding,
+  target: PlannedBuilding,
   sourceHeight: number,
   targetHeight: number,
 ): [number, number, number][] {
   const start = new THREE.Vector3(
-    source.layout.x,
-    BUILDING_BASE_Y + Math.max(0.35, sourceHeight * 0.82),
-    source.layout.z,
+    source.x,
+    BUILDING_BASE_Y + Math.max(0.42, sourceHeight * 0.78),
+    source.z,
   );
   const end = new THREE.Vector3(
-    target.layout.x,
-    BUILDING_BASE_Y + Math.max(0.35, targetHeight * 0.82),
-    target.layout.z,
+    target.x,
+    BUILDING_BASE_Y + Math.max(0.42, targetHeight * 0.78),
+    target.z,
   );
   const distance = start.distanceTo(end);
   const control = start
@@ -982,7 +1042,6 @@ function dependencyArcPoints(
     .lerp(end, 0.5)
     .add(new THREE.Vector3(0, Math.max(1.1, distance * 0.2), 0));
   const points: [number, number, number][] = [];
-
   for (let step = 0; step <= 14; step += 1) {
     const time = step / 14;
     const inverse = 1 - time;
@@ -1002,44 +1061,42 @@ function dependencyArcPoints(
 }
 
 function BuildingMarker({
-  entity,
+  building,
   height,
   color,
   kind,
 }: {
-  entity: CitySceneEntity;
+  building: PlannedBuilding;
   height: number;
   color: string;
   kind: "selected" | "hover";
 }) {
   const groupRef = useRef<THREE.Group>(null);
-  const phase = (stableCityHash(entity.id) % 19) * 0.23;
-
+  const phase = (stableCityHash(building.entityId) % 19) * 0.23;
   useFrame(({ clock }) => {
     if (!groupRef.current) return;
     const pulse =
       kind === "selected"
-        ? 1 + Math.sin(clock.elapsedTime * 2.8 + phase) * 0.025
+        ? 1 + Math.sin(clock.elapsedTime * 2.8 + phase) * 0.026
         : 1;
     groupRef.current.scale.setScalar(pulse);
   });
 
-  const markerHeight = Math.max(0.16, height);
+  const markerHeight = Math.max(0.18, height);
   return (
     <group
       ref={groupRef}
       position={[
-        entity.layout.x,
+        building.x,
         BUILDING_BASE_Y + markerHeight / 2,
-        entity.layout.z,
+        building.z,
       ]}
-      rotation={[0, entity.layout.rotationY, 0]}
     >
       <mesh
         scale={[
-          entity.layout.width * 1.08,
+          building.width * 1.08,
           markerHeight + 0.12,
-          entity.layout.depth * 1.08,
+          building.depth * 1.08,
         ]}
       >
         <boxGeometry args={[1, 1, 1]} />
@@ -1058,8 +1115,8 @@ function BuildingMarker({
         >
           <ringGeometry
             args={[
-              Math.max(entity.layout.width, entity.layout.depth) * 0.62,
-              Math.max(entity.layout.width, entity.layout.depth) * 0.72,
+              Math.max(building.width, building.depth) * 0.62,
+              Math.max(building.width, building.depth) * 0.72,
               32,
             ]}
           />
@@ -1078,35 +1135,43 @@ function BuildingMarker({
 
 function EntityLabel({
   entity,
+  building,
   height,
   selected,
 }: {
   entity: CitySceneEntity;
+  building: PlannedBuilding;
   height: number;
   selected: boolean;
 }) {
   const role = CITY_ROLE_VISUALS[normalizeCityRole(entity.role)];
+  const facility = getFacilityLabel(building.facility);
   return (
     <Html
       center
       position={[
-        entity.layout.x,
-        BUILDING_BASE_Y + height + 0.72,
-        entity.layout.z,
+        building.x,
+        BUILDING_BASE_Y + height + 0.78,
+        building.z,
       ]}
       zIndexRange={[50, 21]}
     >
       <div
         style={{
-          minWidth: 150,
-          maxWidth: 260,
+          minWidth: 165,
+          maxWidth: 270,
           padding: "9px 11px",
-          border: `1px solid ${selected ? "rgba(246, 228, 168, .68)" : "rgba(184, 220, 211, .3)"}`,
+          border: `1px solid ${
+            selected
+              ? "rgba(246, 228, 168, .7)"
+              : "rgba(184, 220, 211, .3)"
+          }`,
           borderRadius: 9,
           color: "#e8f2ee",
-          background: "rgba(5, 15, 19, 0.94)",
-          boxShadow: "0 12px 32px rgba(0, 0, 0, 0.42)",
-          fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
+          background: "rgba(5, 15, 19, .94)",
+          boxShadow: "0 12px 32px rgba(0, 0, 0, .42)",
+          fontFamily:
+            "var(--font-geist-sans), system-ui, sans-serif",
           pointerEvents: "none",
           userSelect: "none",
         }}
@@ -1142,12 +1207,29 @@ function EntityLabel({
           >
             {entity.name}
           </strong>
+          {facility ? (
+            <span
+              style={{
+                marginLeft: "auto",
+                color: "#86cfc1",
+                fontFamily:
+                  "var(--font-geist-mono), ui-monospace, monospace",
+                fontSize: 7,
+                fontWeight: 800,
+                letterSpacing: ".08em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {facility}
+            </span>
+          ) : null}
         </div>
         <div
           style={{
             overflow: "hidden",
             color: "#87a49e",
-            fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+            fontFamily:
+              "var(--font-geist-mono), ui-monospace, monospace",
             fontSize: 9,
             lineHeight: 1.35,
             textOverflow: "ellipsis",
@@ -1155,6 +1237,20 @@ function EntityLabel({
           }}
         >
           {entity.path}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            marginTop: 6,
+            color: "#9db0aa",
+            fontFamily:
+              "var(--font-geist-mono), ui-monospace, monospace",
+            fontSize: 8,
+          }}
+        >
+          <span>{building.floors} FLOORS</span>
+          <span>{building.archetype.replaceAll("-", " ").toUpperCase()}</span>
         </div>
         {entity.summary ? (
           <div
@@ -1177,26 +1273,32 @@ function EntityLabel({
   );
 }
 
-interface CameraRigProps {
-  bounds: CityBounds;
-  cityKey: string;
-  internalFocusRequest: FocusRequest | null;
-  externalFocusEntityId?: string | null;
-  followFocusRequest: FocusRequest | null;
-  entityById: ReadonlyMap<string, CitySceneEntity>;
-  visualStates: ReadonlyMap<string, ResolvedEntityVisualState>;
-}
-
 function CameraRig({
   bounds,
   cityKey,
   internalFocusRequest,
   externalFocusEntityId,
   followFocusRequest,
-  entityById,
-  visualStates,
-}: CameraRigProps) {
+  buildingByEntityId,
+  isRenderable,
+  journeyFocus,
+  journeyActive,
+  targetHeight,
+}: {
+  bounds: LivingCityRenderBounds;
+  cityKey: string;
+  internalFocusRequest: FocusRequest | null;
+  externalFocusEntityId?: string | null;
+  followFocusRequest: FocusRequest | null;
+  buildingByEntityId: ReadonlyMap<string, PlannedBuilding>;
+  isRenderable: (entityId: string) => boolean;
+  journeyFocus: JourneyCameraFocus | null;
+  journeyActive: boolean;
+  targetHeight: (entityId: string) => number;
+}) {
   const { camera } = useThree();
+  const cameraAspect =
+    camera instanceof THREE.PerspectiveCamera ? camera.aspect : 1;
   const controlsRef = useRef<ComponentRef<typeof OrbitControls>>(null);
   const focusingRef = useRef(false);
   const desiredPosition = useRef(new THREE.Vector3());
@@ -1206,17 +1308,16 @@ function CameraRig({
   useLayoutEffect(() => {
     if (lastCityKey.current === cityKey) return;
     lastCityKey.current = cityKey;
-
-    const distance = Math.max(12, bounds.radius * 1.45);
+    const distance = Math.max(18, bounds.radius * 1.32);
     const target = new THREE.Vector3(
       bounds.centerX,
-      Math.min(bounds.maxHeight * 0.22, distance * 0.12),
+      Math.min(bounds.maxHeight * 0.18, distance * 0.1),
       bounds.centerZ,
     );
     camera.position.set(
-      bounds.centerX + distance * 0.82,
-      Math.max(bounds.maxHeight * 1.05, distance * 0.72),
-      bounds.centerZ + distance * 0.82,
+      bounds.centerX + distance * 0.78,
+      Math.max(bounds.maxHeight * 0.88, distance * 0.64),
+      bounds.centerZ + distance * 0.86,
     );
     camera.lookAt(target);
     camera.updateProjectionMatrix();
@@ -1228,43 +1329,47 @@ function CameraRig({
   }, [bounds, camera, cityKey]);
 
   const beginFocus = useCallback(
-    (entityId: string, framing: "building" | "district" = "building") => {
-      const entity = entityById.get(entityId);
-      const state = entity ? visualStates.get(entity.id) : undefined;
-      if (!entity || !state?.visible) return;
-
-      const focusHeight = Math.max(0.4, state.height);
+    (
+      entityId: string,
+      framing: "building" | "district" | "journey" = "building",
+    ) => {
+      const building = buildingByEntityId.get(entityId);
+      if (!building || !isRenderable(entityId)) return;
+      const focusHeight =
+        framing === "journey"
+          ? Math.max(3.2, Math.min(5.2, targetHeight(entityId)))
+          : Math.max(0.5, targetHeight(entityId));
       const target = new THREE.Vector3(
-        entity.layout.x,
-        BUILDING_BASE_Y + focusHeight * 0.42,
-        entity.layout.z,
+        building.x,
+        BUILDING_BASE_Y + focusHeight * 0.4,
+        building.z,
       );
       const focusSize = Math.max(
-        entity.layout.width,
-        entity.layout.depth,
+        building.width,
+        building.depth,
         focusHeight * 0.7,
       );
       const distance =
         framing === "district"
-          ? clampCityValue(bounds.radius * 0.52, 15, 34)
-          : clampCityValue(focusSize * 4.8, 8, 28);
+          ? clampCityValue(bounds.radius * 0.48, 15, 38)
+          : framing === "journey"
+            ? clampCityValue(bounds.radius * 0.4, 24, 46)
+          : clampCityValue(focusSize * 4.5, 8, 30);
       const currentTarget =
         controlsRef.current?.target ??
         new THREE.Vector3(bounds.centerX, 0, bounds.centerZ);
-      const horizontalDirection = new THREE.Vector2(
+      const direction = new THREE.Vector2(
         camera.position.x - currentTarget.x,
         camera.position.z - currentTarget.z,
       );
-      if (horizontalDirection.lengthSq() < 0.001) {
-        horizontalDirection.set(1, 1);
-      }
-      horizontalDirection.normalize();
+      if (direction.lengthSq() < 0.001) direction.set(1, 1);
+      direction.normalize();
 
       desiredTarget.current.copy(target);
       desiredPosition.current.set(
-        target.x + horizontalDirection.x * distance * 0.78,
+        target.x + direction.x * distance * 0.78,
         target.y + distance * 0.66,
-        target.z + horizontalDirection.y * distance * 0.78,
+        target.z + direction.y * distance * 0.78,
       );
       focusingRef.current = true;
     },
@@ -1272,10 +1377,49 @@ function CameraRig({
       bounds.centerX,
       bounds.centerZ,
       bounds.radius,
+      buildingByEntityId,
       camera,
-      entityById,
-      visualStates,
+      isRenderable,
+      targetHeight,
     ],
+  );
+  const beginFocusBounds = useCallback(
+    (focus: JourneyCameraFocus) => {
+      if (focus.points.length === 0) return;
+      const xs = focus.points.map((point) => point.x);
+      const zs = focus.points.map((point) => point.z);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minZ = Math.min(...zs);
+      const maxZ = Math.max(...zs);
+      const target = new THREE.Vector3(
+        (minX + maxX) * 0.05 + focus.focusPoint.x * 0.9,
+        BLOCK_TOP_Y + 1.5,
+        (minZ + maxZ) * 0.05 + focus.focusPoint.z * 0.9,
+      );
+      const span = Math.max(maxX - minX, maxZ - minZ, 10);
+      const aspect = Math.max(0.62, Math.min(1, cameraAspect));
+      const distance = clampCityValue(
+        (span * 1.55) / Math.sqrt(aspect) + 10,
+        26,
+        72,
+      );
+      const direction = new THREE.Vector2(
+        target.x - bounds.centerX,
+        target.z - bounds.centerZ,
+      );
+      if (direction.lengthSq() < 0.001) direction.set(0.72, 0.69);
+      direction.normalize();
+
+      desiredTarget.current.copy(target);
+      desiredPosition.current.set(
+        target.x + direction.x * distance * 0.78,
+        target.y + distance * 0.66,
+        target.z + direction.y * distance * 0.78,
+      );
+      focusingRef.current = true;
+    },
+    [bounds.centerX, bounds.centerZ, cameraAspect],
   );
 
   useEffect(() => {
@@ -1283,24 +1427,32 @@ function CameraRig({
       beginFocus(followFocusRequest.entityId, "district");
     }
   }, [beginFocus, followFocusRequest]);
-
   useEffect(() => {
-    if (externalFocusEntityId) beginFocus(externalFocusEntityId);
-  }, [beginFocus, externalFocusEntityId]);
-
+    if (externalFocusEntityId) {
+      beginFocus(
+        externalFocusEntityId,
+        journeyActive ? "journey" : "building",
+      );
+    }
+  }, [beginFocus, externalFocusEntityId, journeyActive]);
   useEffect(() => {
     if (internalFocusRequest) beginFocus(internalFocusRequest.entityId);
   }, [beginFocus, internalFocusRequest]);
+  useEffect(() => {
+    if (journeyFocus) {
+      beginFocusBounds(journeyFocus);
+    } else if (journeyActive) {
+      focusingRef.current = false;
+    }
+  }, [beginFocusBounds, journeyActive, journeyFocus]);
 
   useFrame((_, delta) => {
     const controls = controlsRef.current;
     if (!controls || !focusingRef.current) return;
-
     const blend = 1 - Math.exp(-delta * 5.5);
     camera.position.lerp(desiredPosition.current, blend);
     controls.target.lerp(desiredTarget.current, blend);
     controls.update();
-
     if (
       camera.position.distanceToSquared(desiredPosition.current) < 0.0025 &&
       controls.target.distanceToSquared(desiredTarget.current) < 0.001
@@ -1319,10 +1471,10 @@ function CameraRig({
       enableDamping
       enablePan
       makeDefault
-      maxDistance={Math.max(80, bounds.radius * 5)}
+      maxDistance={Math.max(90, bounds.radius * 5)}
       maxPolarAngle={Math.PI * 0.475}
-      minDistance={3.5}
-      minPolarAngle={0.18}
+      minDistance={4}
+      minPolarAngle={0.16}
       onStart={() => {
         focusingRef.current = false;
       }}
@@ -1342,7 +1494,8 @@ function DefaultEmptyState() {
         color: "#a9c2bc",
         background: "rgba(6, 17, 21, .9)",
         boxShadow: "0 16px 40px rgba(0, 0, 0, .35)",
-        fontFamily: "var(--font-geist-sans), system-ui, sans-serif",
+        fontFamily:
+          "var(--font-geist-sans), system-ui, sans-serif",
         textAlign: "center",
       }}
     >

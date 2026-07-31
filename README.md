@@ -97,6 +97,8 @@ CLI 在 `apps/cli`，共享事实层位于 `packages/*`。
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — 分析与实体身份
 - [`docs/DATA_FORMAT.md`](./docs/DATA_FORMAT.md) — 静态数据包协议
 - [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md) — 成本模型和容量边界
+- [`docs/CITY_SIMULATION_RESEARCH.md`](./docs/CITY_SIMULATION_RESEARCH.md) — 城市模拟化调研与取舍
+- [`docs/V2_CITY_SIMULATION_SPEC.md`](./docs/V2_CITY_SIMULATION_SPEC.md) — V2 活城市规格与实施计划
 - [`TASKS.md`](./TASKS.md) — PR 0–5 验收映射
 
 ## 隐私与安全

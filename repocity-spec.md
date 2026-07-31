@@ -1,6 +1,11 @@
 # RepoCity / 零号城 — 3D 代码城市与 Git 成长回放
 
 > 面向 Codex 的可执行实现规格。目标是先做出一个稳定、可解释、可回放的 3D 仓库浏览器，而不是先做一个大型 DeepWiki 克隆。
+>
+> **2026-07-31 规格路由：** 本文保留原始 MVP 产品合同；城市生成、组件聚合、
+> 语义道路、可追溯人流/车流/船运与后续实施 Gate，以
+> [`docs/V4_SEMANTIC_METROPOLIS_SPEC.md`](docs/V4_SEMANTIC_METROPOLIS_SPEC.md)
+> 为当前权威规格。两者冲突时，V4 对 Flow / Semantic Metropolis 场景优先。
 
 ## 0. 一句话定位
 

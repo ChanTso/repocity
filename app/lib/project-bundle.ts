@@ -3,6 +3,8 @@ import {
   CommitsFileSchema,
   DistrictsFileSchema,
   EntitiesFileSchema,
+  ReplayDeltaSchema,
+  ReplayKeyframeSchema,
   RelationsFileSchema,
   RepoManifestSchema,
   type Chapter,
@@ -10,6 +12,8 @@ import {
   type CommitMeta,
   type District,
   type Relation,
+  type ReplayDelta,
+  type ReplayKeyframe,
   type RepoManifest,
 } from "@repocity/schema";
 import type { ZodType } from "zod";
@@ -30,7 +34,9 @@ export type ProjectBundleResource =
   | "entities"
   | "relations"
   | "commits"
-  | "chapters";
+  | "chapters"
+  | "deltas"
+  | "keyframe";
 
 export interface LoadProjectBundleOptions {
   signal?: AbortSignal;
@@ -48,6 +54,8 @@ export interface ViewerBundleSource {
   relations: Relation[];
   commits: CommitMeta[];
   chapters: Chapter[];
+  deltas?: ReplayDelta[];
+  keyframes?: ReplayKeyframe[];
 }
 
 /**
@@ -220,6 +228,148 @@ async function loadResource<T>(
   return validateResource(resource, url, schema, input);
 }
 
+async function loadDeltas(
+  url: string,
+  fetchImpl: typeof globalThis.fetch,
+  signal?: AbortSignal,
+): Promise<ReplayDelta[]> {
+  throwIfAborted(signal);
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      headers: {
+        accept: "application/x-ndjson, application/json;q=0.9",
+      },
+      signal,
+    });
+  } catch (error) {
+    if (isAbort(error, signal)) throw error;
+    throw new ProjectBundleError(
+      "deltas",
+      url,
+      `network request failed (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error },
+    );
+  }
+
+  throwIfAborted(signal);
+  if (!response.ok) {
+    const status = [response.status, response.statusText]
+      .filter(Boolean)
+      .join(" ");
+    throw new ProjectBundleError(
+      "deltas",
+      url,
+      `HTTP ${status || "request failed"}`,
+    );
+  }
+
+  let contents: string;
+  try {
+    contents = await response.text();
+    throwIfAborted(signal);
+  } catch (error) {
+    if (isAbort(error, signal)) throw error;
+    throw new ProjectBundleError(
+      "deltas",
+      url,
+      `response body could not be read (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error },
+    );
+  }
+
+  const deltas: ReplayDelta[] = [];
+  const lines = contents.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!.trim();
+    if (!line) continue;
+
+    let input: unknown;
+    try {
+      input = JSON.parse(line);
+    } catch (error) {
+      throw new ProjectBundleError(
+        "deltas",
+        url,
+        `invalid NDJSON at line ${index + 1} (${error instanceof Error ? error.message : String(error)})`,
+        { cause: error },
+      );
+    }
+
+    const result = ReplayDeltaSchema.safeParse(input);
+    if (!result.success) {
+      throw new ProjectBundleError(
+        "deltas",
+        url,
+        `schema validation failed at line ${index + 1} (${formatValidationIssues(result.error.issues)})`,
+        { cause: result.error },
+      );
+    }
+    deltas.push(result.data);
+  }
+
+  return deltas;
+}
+
+async function loadOptionalInitialKeyframe(
+  url: string,
+  fetchImpl: typeof globalThis.fetch,
+  signal?: AbortSignal,
+): Promise<ReplayKeyframe | undefined> {
+  throwIfAborted(signal);
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      headers: { accept: "application/json" },
+      signal,
+    });
+  } catch (error) {
+    if (isAbort(error, signal)) throw error;
+    throw new ProjectBundleError(
+      "keyframe",
+      url,
+      `network request failed (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error },
+    );
+  }
+
+  throwIfAborted(signal);
+  if (response.status === 404) return undefined;
+  if (!response.ok) {
+    const status = [response.status, response.statusText]
+      .filter(Boolean)
+      .join(" ");
+    throw new ProjectBundleError(
+      "keyframe",
+      url,
+      `HTTP ${status || "request failed"}`,
+    );
+  }
+
+  let input: unknown;
+  try {
+    input = await response.json();
+    throwIfAborted(signal);
+  } catch (error) {
+    if (isAbort(error, signal)) throw error;
+    throw new ProjectBundleError(
+      "keyframe",
+      url,
+      `invalid JSON (${error instanceof Error ? error.message : String(error)})`,
+      { cause: error },
+    );
+  }
+
+  return validateResource(
+    "keyframe",
+    url,
+    ReplayKeyframeSchema,
+    input,
+  );
+}
+
 function districtEyebrow(id: string): string {
   return (
     id
@@ -305,7 +455,16 @@ function adaptChapter(chapter: Chapter): DemoChapter {
  * This function is exported so already-fetched data can share the same adapter.
  */
 export function adaptProjectBundle(source: ViewerBundleSource): ViewerProject {
-  const { manifest, districts, entities, relations, commits, chapters } = source;
+  const {
+    manifest,
+    districts,
+    entities,
+    relations,
+    commits,
+    chapters,
+    deltas,
+    keyframes,
+  } = source;
   const districtNames = new Map(
     districts.map((district) => [district.id, district.name]),
   );
@@ -324,12 +483,16 @@ export function adaptProjectBundle(source: ViewerBundleSource): ViewerProject {
     relations: relations.map(adaptRelation),
     commits: commits.map((commit) => adaptCommit(commit, chapters)),
     chapters: chapters.map(adaptChapter),
+    canonicalEntities: entities,
+    canonicalRelations: relations,
+    ...(deltas ? { deltas } : {}),
+    ...(keyframes ? { keyframes } : {}),
   };
 }
 
 /**
- * Loads a RepoCity static bundle. Only Viewer shell data is fetched here;
- * replay deltas and keyframes remain available for a future on-demand loader.
+ * Loads a RepoCity static bundle, including replay deltas and the initial
+ * keyframe when one is present.
  */
 export async function loadProjectBundle(
   baseUrl: string | URL,
@@ -367,45 +530,64 @@ export async function loadProjectBundle(
     relations: resolveBundleUrl(baseUrl, manifest.files.relations),
     commits: resolveBundleUrl(baseUrl, manifest.files.commits),
     chapters: resolveBundleUrl(baseUrl, manifest.files.chapters),
+    deltas: resolveBundleUrl(baseUrl, manifest.files.deltas),
+    initialKeyframe: resolveBundleUrl(
+      baseUrl,
+      `${manifest.files.keyframesDir.replace(/\/+$/, "")}/0000.json`,
+    ),
   };
 
-  const [districts, entities, relations, commits, chapters] = await Promise.all([
-    loadResource(
-      "districts",
-      resourceUrls.districts,
-      DistrictsFileSchema,
-      fetchImpl,
-      options.signal,
-    ),
-    loadResource(
-      "entities",
-      resourceUrls.entities,
-      EntitiesFileSchema,
-      fetchImpl,
-      options.signal,
-    ),
-    loadResource(
-      "relations",
-      resourceUrls.relations,
-      RelationsFileSchema,
-      fetchImpl,
-      options.signal,
-    ),
-    loadResource(
-      "commits",
-      resourceUrls.commits,
-      CommitsFileSchema,
-      fetchImpl,
-      options.signal,
-    ),
-    loadResource(
-      "chapters",
-      resourceUrls.chapters,
-      ChaptersFileSchema,
-      fetchImpl,
-      options.signal,
-    ),
-  ]);
+  const [
+    districts,
+    entities,
+    relations,
+    commits,
+    chapters,
+    deltas,
+    initialKeyframe,
+  ] = await Promise.all([
+      loadResource(
+        "districts",
+        resourceUrls.districts,
+        DistrictsFileSchema,
+        fetchImpl,
+        options.signal,
+      ),
+      loadResource(
+        "entities",
+        resourceUrls.entities,
+        EntitiesFileSchema,
+        fetchImpl,
+        options.signal,
+      ),
+      loadResource(
+        "relations",
+        resourceUrls.relations,
+        RelationsFileSchema,
+        fetchImpl,
+        options.signal,
+      ),
+      loadResource(
+        "commits",
+        resourceUrls.commits,
+        CommitsFileSchema,
+        fetchImpl,
+        options.signal,
+      ),
+      loadResource(
+        "chapters",
+        resourceUrls.chapters,
+        ChaptersFileSchema,
+        fetchImpl,
+        options.signal,
+      ),
+      loadDeltas(resourceUrls.deltas, fetchImpl, options.signal),
+      loadOptionalInitialKeyframe(
+        resourceUrls.initialKeyframe,
+        fetchImpl,
+        options.signal,
+      ),
+    ]);
 
   return adaptProjectBundle({
     manifest,
@@ -414,5 +596,7 @@ export async function loadProjectBundle(
     relations,
     commits,
     chapters,
+    deltas,
+    keyframes: initialKeyframe ? [initialKeyframe] : [],
   });
 }

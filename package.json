@@ -18,7 +18,7 @@
     "repocity": "tsx apps/cli/src/cli.ts",
     "fixture:tiny": "node fixtures/tiny-ts-repo/scripts/create-history.mjs",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
-    "test:unit": "npm run test --workspaces --if-present && vitest run app/lib/project-bundle.test.ts",
+    "test:unit": "npm run test --workspaces --if-present && vitest run app/lib",
     "test:web": "node --test tests/rendered-html.test.mjs",
     "test": "npm run test:unit && npm run build && npm run test:web",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern fixtures --ignore-pattern public/projects",

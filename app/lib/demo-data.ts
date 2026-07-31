@@ -1,3 +1,10 @@
+import type {
+  CityEntity,
+  Relation,
+  ReplayDelta,
+  ReplayKeyframe,
+} from "@repocity/schema";
+
 export type FileRole =
   | "source"
   | "test"
@@ -81,6 +88,25 @@ export interface DemoChapter {
   end: number;
 }
 
+/**
+ * An explicit project fact that may justify a semantic terrain boundary.
+ *
+ * This is deliberately separate from DemoRelation: a static import says that
+ * source code is coupled, not that an artifact moves at runtime. The optional
+ * relationId can cite a structural relation when one genuinely describes the
+ * same two endpoints.
+ */
+export interface ProjectBoundaryFact {
+  id: string;
+  kind: "artifact";
+  crossing: "water";
+  sourceEntityId: string;
+  targetEntityId: string;
+  relationId?: string;
+  provenance: "inferred" | "observed" | "test";
+  reason: string;
+}
+
 export interface DemoManifest {
   schemaVersion: "0.1";
   projectId: string;
@@ -105,6 +131,20 @@ export interface ViewerProject {
   relations: DemoRelation[];
   commits: DemoCommit[];
   chapters: DemoChapter[];
+  /**
+   * Optional, explicit semantic facts. Imported repositories omit this until
+   * an analyzer or scenario declares a trustworthy boundary.
+   */
+  boundaryFacts?: ProjectBoundaryFact[];
+  /**
+   * Canonical facts are retained for exact replay reduction. Hand-authored
+   * demo projects may omit them and continue using the renderer's legacy
+   * bornAt/diedAt fallback.
+   */
+  canonicalEntities?: CityEntity[];
+  canonicalRelations?: Relation[];
+  deltas?: ReplayDelta[];
+  keyframes?: ReplayKeyframe[];
 }
 
 const districtSeeds: Array<
@@ -316,8 +356,13 @@ export const demoEntities: DemoEntity[] = districtSeeds.flatMap((district) => {
     const row = Math.floor(index / columns);
     const column = index % columns;
     const stem = stems[index % stems.length];
+    // The demo is a synthetic fixture, but its Golden Journey entry must
+    // still name the real RepoCity boundary. Keep the CLI gateway on the
+    // build/analyzer side so prepareRepository can reach git-analyzer without
+    // inventing a bridge across the typed static-bundle boundary.
+    const isCliGateway = district.id === "analyzer" && index === 1;
     const extension =
-      district.id === "docs"
+      isCliGateway || district.id === "docs"
         ? ".ts"
         : seed % 11 === 0
           ? ".js"
@@ -325,17 +370,23 @@ export const demoEntities: DemoEntity[] = districtSeeds.flatMap((district) => {
             ? ".tsx"
             : ".ts";
     const role: FileRole =
-      index % 19 === 0
-        ? "config"
-        : index % 17 === 0
-          ? "script"
-          : district.role;
-    const loc = 32 + (seed % 540);
+      isCliGateway
+        ? "script"
+        : index % 19 === 0
+          ? "config"
+          : index % 17 === 0
+            ? "script"
+            : district.role;
+    const loc = isCliGateway ? 214 : 32 + (seed % 540);
     const bornAt = Math.min(15, Math.floor((index / district.count) * 17));
     const isRemoved = index > district.count - 3 && district.id !== "core";
-    const numberedStem = `${stem}-${String(index + 1).padStart(2, "0")}`;
-    const path = `${district.prefix}/${numberedStem}${extension}`;
-    const exportCount = 1 + (seed % 6);
+    const numberedStem = isCliGateway
+      ? "cli"
+      : `${stem}-${String(index + 1).padStart(2, "0")}`;
+    const path = isCliGateway
+      ? "apps/cli/src/cli.ts"
+      : `${district.prefix}/${numberedStem}${extension}`;
+    const exportCount = isCliGateway ? 2 : 1 + (seed % 6);
 
     return {
       id: `${district.id}-${hash(path).toString(36)}`,
@@ -376,19 +427,23 @@ export const demoEntities: DemoEntity[] = districtSeeds.flatMap((district) => {
         rotationY: seed % 2 === 0 ? 0 : Math.PI / 2,
         styleVariant: seed % 4,
       },
-      summary: summaries[district.id],
-      exportNames: Array.from(
-        { length: exportCount },
-        (_, exportIndex) =>
-          `${stem
-            .split("-")
-            .map((part, partIndex) =>
-              partIndex === 0
-                ? part
-                : part.charAt(0).toUpperCase() + part.slice(1),
-            )
-            .join("")}${exportIndex === 0 ? "" : exportIndex + 1}`,
-      ),
+      summary: isCliGateway
+        ? "接收仓库输入并串行调度 prepareRepository、Git 分析和静态 Bundle 生产。"
+        : summaries[district.id],
+      exportNames: isCliGateway
+        ? ["buildProject", "prepareRepository"]
+        : Array.from(
+            { length: exportCount },
+            (_, exportIndex) =>
+              `${stem
+                .split("-")
+                .map((part, partIndex) =>
+                  partIndex === 0
+                    ? part
+                    : part.charAt(0).toUpperCase() + part.slice(1),
+                )
+                .join("")}${exportIndex === 0 ? "" : exportIndex + 1}`,
+          ),
     };
   });
 });
@@ -520,6 +575,18 @@ export const demoProject: ViewerProject = {
   relations: demoRelations,
   commits: demoCommits,
   chapters: demoChapters,
+  boundaryFacts: [
+    {
+      id: "repocity-project-bundle-boundary",
+      kind: "artifact",
+      crossing: "water",
+      sourceEntityId: "analyzer-1scdft0",
+      targetEntityId: "web-1ke3dht",
+      provenance: "inferred",
+      reason:
+        "The analyzer bundle writer publishes a static project artifact that the web project loader consumes across the compiler/viewer boundary.",
+    },
+  ],
 };
 
 export function getEntityRelations(

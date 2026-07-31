@@ -4,29 +4,35 @@ import {
   ArrowUpRight,
   Box,
   Braces,
+  Car,
   Check,
   ChevronDown,
   CircleDot,
   Code2,
   Command,
   Copy,
+  Eye,
+  EyeOff,
   FileCode2,
   Focus,
   GitBranch,
   GitCommitHorizontal,
   History,
   Layers3,
-  Map,
+  Map as MapIcon,
   Maximize2,
   Network,
   Pause,
   Play,
   Plus,
   RotateCcw,
+  Route,
   Search,
-  Settings2,
+  Ship,
   Sparkles,
   SquareCode,
+  Sun,
+  Users,
   X,
   Zap,
 } from "lucide-react";
@@ -39,6 +45,11 @@ import {
   useState,
 } from "react";
 import { CityScene } from "./CityScene";
+import { FlowJourneyConsole } from "./FlowJourneyConsole";
+import type {
+  FlowJourneyFacility,
+  FlowJourneyView,
+} from "./city/FlowJourneyLayer";
 import {
   demoProject,
   getEntityById,
@@ -48,9 +59,44 @@ import {
   type FileRole,
   type ViewerProject,
 } from "../lib/demo-data";
+import {
+  isEntityVisibleAtCommit,
+  isRelationVisibleAtCommit,
+} from "../lib/city-visuals";
+import { planLivingCity } from "../lib/living-city";
+import { planSemanticCity } from "../lib/semantic-city";
+import { projectSemanticFlow } from "../lib/semantic-flow";
+import { planFlowSimulation } from "../lib/flow-simulation";
+import { resolveViewerReplayFrame } from "../lib/viewer-replay";
 
-type Mode = "explore" | "replay";
+type Mode = "explore" | "journey" | "replay";
 type InspectorTab = "overview" | "relations" | "history";
+type TimePreset = "dawn" | "day" | "dusk" | "night";
+
+const REPOSITORY_JOURNEY_FACILITIES: readonly FlowJourneyFacility[] = [
+  "gateway",
+  "factory",
+  "module",
+  "civic",
+  "rail-yard",
+  "customs",
+  "port",
+  "port",
+  "civic",
+  "construction",
+];
+const FLOW_STEP_DURATION_MS = 4_600;
+
+const timePresets: ReadonlyArray<{
+  id: TimePreset;
+  hour: number;
+  label: string;
+}> = [
+  { id: "dawn", hour: 7, label: "晨曦" },
+  { id: "day", hour: 14, label: "日间" },
+  { id: "dusk", hour: 19, label: "黄昏" },
+  { id: "night", hour: 23, label: "夜景" },
+];
 
 const roleLabels: Record<FileRole, string> = {
   source: "源码",
@@ -242,6 +288,8 @@ function Inspector({
   onSelect,
   currentCommitIndex,
   project,
+  activeRelationIds,
+  visibleEntityIds,
 }: {
   entity: DemoEntity;
   tab: InspectorTab;
@@ -251,10 +299,18 @@ function Inspector({
   onSelect: (entityId: string) => void;
   currentCommitIndex: number;
   project: ViewerProject;
+  activeRelationIds: ReadonlySet<string>;
+  visibleEntityIds: ReadonlySet<string>;
 }) {
   const relations = useMemo(
-    () => getEntityRelations(entity.id, project.relations),
-    [entity.id, project.relations],
+    () =>
+      getEntityRelations(
+        entity.id,
+        project.relations.filter((relation) =>
+          activeRelationIds.has(relation.id),
+        ),
+      ),
+    [activeRelationIds, entity.id, project.relations],
   );
   const history = getEntityHistory(
     entity.id,
@@ -287,12 +343,18 @@ function Inspector({
       })),
     ]
       .filter((item) => {
-        if (!item.entity || seen.has(item.entity.id)) return false;
+        if (
+          !item.entity ||
+          !visibleEntityIds.has(item.entity.id) ||
+          seen.has(item.entity.id)
+        ) {
+          return false;
+        }
         seen.add(item.entity.id);
         return true;
       })
       .slice(0, 8);
-  }, [project.entities, relations]);
+  }, [project.entities, relations, visibleEntityIds]);
 
   return (
     <div className="inspector-content">
@@ -529,7 +591,7 @@ function Inspector({
 export function RepoCityApp() {
   const [project, setProject] = useState<ViewerProject>(demoProject);
   const initialEntity = findInitialEntity(demoProject.entities);
-  const [mode, setMode] = useState<Mode>("explore");
+  const [mode, setMode] = useState<Mode>("journey");
   const [commitIndex, setCommitIndex] = useState(
     demoProject.commits.length - 1,
   );
@@ -548,15 +610,187 @@ export function RepoCityApp() {
   const [projectLoadError, setProjectLoadError] = useState<string>();
   const [layersOpen, setLayersOpen] = useState(false);
   const [followConstruction, setFollowConstruction] = useState(true);
+  const [hudVisible, setHudVisible] = useState(true);
+  const [timePreset, setTimePreset] = useState<TimePreset>("day");
+  const [showTraffic, setShowTraffic] = useState(true);
+  const [showPedestrians, setShowPedestrians] = useState(true);
+  const [showWaterTraffic, setShowWaterTraffic] = useState(true);
+  const [journeyPlaying, setJourneyPlaying] = useState(true);
+  const [journeyStepIndex, setJourneyStepIndex] = useState(0);
+  // Start with the component city overview. Following is opt-in so the first
+  // impression explains the whole system instead of clipping into one stop.
+  const [followJourney, setFollowJourney] = useState(false);
+  const [activeJourneyId, setActiveJourneyId] = useState<string>();
+  const [prefersReducedMotion, setPrefersReducedMotion] =
+    useState(false);
   const [hiddenDistricts, setHiddenDistricts] = useState<Set<string>>(
     new Set(),
   );
   const [copiedSha, setCopiedSha] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
 
-  const { manifest, districts, entities, relations, commits, chapters } =
-    project;
-  const selectedEntity = getEntityById(selectedEntityId, entities);
+  const {
+    manifest,
+    districts,
+    entities,
+    relations,
+    commits,
+    chapters,
+    boundaryFacts,
+  } = project;
+  const flowEntities = useMemo(
+    () => entities.filter((entity) => isEntityVisibleAtCommit(entity, null)),
+    [entities],
+  );
+  const flowEntityIds = useMemo(
+    () => new Set(flowEntities.map((entity) => entity.id)),
+    [flowEntities],
+  );
+  const flowRelations = useMemo(
+    () =>
+      relations.filter(
+        (relation) =>
+          isRelationVisibleAtCommit(relation, null) &&
+          flowEntityIds.has(relation.sourceId) &&
+          flowEntityIds.has(relation.targetId),
+      ),
+    [flowEntityIds, relations],
+  );
+  const flowEntityById = useMemo(
+    () => new Map(flowEntities.map((entity) => [entity.id, entity])),
+    [flowEntities],
+  );
+  const livingCityPlan = useMemo(
+    () => planLivingCity({ entities, districts, relations }),
+    [districts, entities, relations],
+  );
+  const semanticCityPlan = useMemo(
+    () =>
+      planSemanticCity({
+        cityPlan: livingCityPlan,
+        entities: flowEntities,
+        relations: flowRelations,
+        boundaryFacts,
+      }),
+    [boundaryFacts, flowEntities, flowRelations, livingCityPlan],
+  );
+  const cityCapabilities = useMemo(() => {
+    return {
+      waterTraffic: semanticCityPlan.terrain.waterBoundaries.length > 0,
+    };
+  }, [semanticCityPlan]);
+  const flowSimulation = useMemo(
+    () =>
+      planFlowSimulation({
+        entities: flowEntities,
+        relations: flowRelations,
+        cityPlan: livingCityPlan,
+        artifactWaterBoundaries:
+          semanticCityPlan.terrain.waterBoundaries,
+        artifactBoundaryFacts: boundaryFacts ?? [],
+        maxJourneys: 4,
+        maxLegsPerJourney: 12,
+      }),
+    [
+      boundaryFacts,
+      flowEntities,
+      flowRelations,
+      livingCityPlan,
+      semanticCityPlan,
+    ],
+  );
+  const activeFlowJourney = useMemo(() => {
+    const requested = activeJourneyId
+      ? flowSimulation.journeys.find(
+          (journey) => journey.id === activeJourneyId,
+        )
+      : undefined;
+    return (
+      requested ??
+      flowSimulation.journeys.find(
+        (journey) => journey.id === flowSimulation.defaultJourneyId,
+      ) ??
+      flowSimulation.journeys[0]
+    );
+  }, [activeJourneyId, flowSimulation]);
+  const semanticFlowProjection = useMemo(
+    () =>
+      activeFlowJourney
+        ? projectSemanticFlow({
+            plan: semanticCityPlan,
+            journey: activeFlowJourney,
+          })
+        : null,
+    [activeFlowJourney, semanticCityPlan],
+  );
+  const flowJourneyView = useMemo<FlowJourneyView | null>(
+    () =>
+      activeFlowJourney
+        ? {
+            id: activeFlowJourney.id,
+            kind: activeFlowJourney.kind,
+            title: activeFlowJourney.title,
+            summary: activeFlowJourney.summary,
+            provenance: activeFlowJourney.provenance,
+            steps: activeFlowJourney.steps.map((step, index) => {
+              const entity = flowEntityById.get(step.entityId);
+              return {
+                id: step.id,
+                entityId: step.entityId,
+                label: step.label,
+                detail: step.description,
+                payloadLabel: step.payload.label,
+                sourcePath: entity?.path ?? step.entityId,
+                symbolLabels: entity?.exportNames ?? [],
+                evidenceIds: step.evidenceIds,
+                facility:
+                  activeFlowJourney.kind === "repository-pipeline"
+                    ? (REPOSITORY_JOURNEY_FACILITIES[index] ?? "module")
+                    : "module",
+              };
+            }),
+            legs: activeFlowJourney.legs.map((leg) => ({
+              id: leg.id,
+              sourceEntityId: leg.sourceEntityId,
+              targetEntityId: leg.targetEntityId,
+              mode: leg.mode,
+              // Visual density is the explicit scenario cohort, never the
+              // static import weight stored on the structural leg.
+              weight: activeFlowJourney.tokens.filter(
+                (token) => token.legId === leg.id,
+              ).length,
+              provenance: leg.provenance,
+              label: leg.label,
+              reason: leg.reason,
+              relationIds: leg.relationIds,
+              evidenceIds: leg.evidenceIds,
+              points: leg.points,
+            })),
+            tokens: activeFlowJourney.tokens.map((token) => ({
+              id: token.id,
+              legId: token.legId,
+              mode: token.mode,
+              direction: token.direction,
+              provenance: token.provenance,
+              payloadLabel: token.payload.label,
+              progress: token.progress,
+              speed: token.speed,
+              delay: token.delay,
+              evidenceIds: token.evidenceIds,
+            })),
+            evidence: activeFlowJourney.evidence.map((evidence) => ({
+              id: evidence.id,
+              kind: evidence.kind,
+              provenance: evidence.provenance,
+              confidence: evidence.confidence,
+              label: evidence.label,
+              reason: evidence.reason,
+              relationIds: evidence.relationIds,
+            })),
+          }
+        : null,
+    [activeFlowJourney, flowEntityById],
+  );
   const currentCommit =
     commits[commitIndex] ?? commits.at(-1) ?? demoProject.commits[0];
   const currentChapter =
@@ -566,23 +800,66 @@ export function RepoCityApp() {
     ) ??
     chapters[0] ??
     demoProject.chapters[0];
-
-  const filteredEntities = useMemo(
+  const replayFrame = useMemo(
     () =>
-      entities.filter(
-        (entity) => !hiddenDistricts.has(entity.districtId),
-      ),
-    [entities, hiddenDistricts],
+      resolveViewerReplayFrame(
+        project,
+        mode === "replay" ? commitIndex : null,
+    ),
+    [commitIndex, mode, project],
   );
-
+  const visibleEntityIds = useMemo(
+    () =>
+      new Set(
+        Object.entries(replayFrame.entityFrameStates)
+          .filter(([, state]) => state.visible)
+          .map(([entityId]) => entityId),
+      ),
+    [replayFrame.entityFrameStates],
+  );
+  const visibleEntities = useMemo(
+    () => entities.filter((entity) => visibleEntityIds.has(entity.id)),
+    [entities, visibleEntityIds],
+  );
+  const visibleDistrictIds = useMemo(
+    () => new Set(visibleEntities.map((entity) => entity.districtId)),
+    [visibleEntities],
+  );
+  const visibleDistricts = useMemo(
+    () => districts.filter((district) => visibleDistrictIds.has(district.id)),
+    [districts, visibleDistrictIds],
+  );
+  const effectiveSelectedEntityId =
+    selectedEntityId === ""
+      ? ""
+      : visibleEntityIds.has(selectedEntityId)
+      ? selectedEntityId
+      : ([...replayFrame.changedEntityIds].find((entityId) =>
+          visibleEntityIds.has(entityId),
+        ) ??
+        visibleEntities[0]?.id ??
+        "");
+  const selectedEntity = getEntityById(
+    effectiveSelectedEntityId,
+    entities,
+  );
   const activateProject = useCallback(
     (nextProject: ViewerProject, projectKey?: string | null) => {
+      // Validate cross-file replay invariants before committing the project to
+      // React state, so malformed external bundles surface in the load dialog.
+      resolveViewerReplayFrame(nextProject, null);
       setProject(nextProject);
       const firstEntity = findInitialEntity(nextProject.entities);
       setSelectedEntityId(firstEntity?.id ?? "");
       setCommitIndex(Math.max(0, nextProject.commits.length - 1));
-      setMode("explore");
+      setMode("journey");
       setIsPlaying(false);
+      setJourneyPlaying(
+        !window.matchMedia("(prefers-reduced-motion: reduce)")
+          .matches,
+      );
+      setJourneyStepIndex(0);
+      setActiveJourneyId(undefined);
       setHiddenDistricts(new Set());
       setInspectorTab("overview");
       setProjectLoadState("ready");
@@ -653,6 +930,7 @@ export function RepoCityApp() {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return [];
     return entities
+      .filter((entity) => visibleEntityIds.has(entity.id))
       .map((entity) => {
         const name = entity.name.toLowerCase();
         const path = entity.path.toLowerCase();
@@ -671,7 +949,36 @@ export function RepoCityApp() {
       .filter((item) => item.score < 9)
       .sort((a, b) => a.score - b.score || a.entity.path.localeCompare(b.entity.path))
       .slice(0, 7);
-  }, [entities, searchQuery]);
+  }, [entities, searchQuery, visibleEntityIds]);
+
+  useEffect(() => {
+    if (mode !== "journey" || flowSimulation.journeys.length > 0) return;
+    const frame = window.requestAnimationFrame(() => {
+      setMode("explore");
+      setJourneyPlaying(false);
+      setFollowJourney(false);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [flowSimulation.journeys.length, mode]);
+
+  useEffect(() => {
+    const media = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    );
+    const applyPreference = () => {
+      setPrefersReducedMotion(media.matches);
+      if (media.matches) {
+        setJourneyPlaying(false);
+        setFollowJourney(false);
+      }
+    };
+    const frame = window.requestAnimationFrame(applyPreference);
+    media.addEventListener("change", applyPreference);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      media.removeEventListener("change", applyPreference);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isPlaying || mode !== "replay") return;
@@ -690,34 +997,90 @@ export function RepoCityApp() {
   }, [commits.length, isPlaying, mode, speed]);
 
   useEffect(() => {
+    if (
+      mode !== "journey" ||
+      !journeyPlaying ||
+      !flowJourneyView ||
+      flowJourneyView.steps.length < 2
+    ) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setJourneyStepIndex(
+        (current) => (current + 1) % flowJourneyView.steps.length,
+      );
+    }, FLOW_STEP_DURATION_MS);
+    return () => window.clearInterval(timer);
+  }, [flowJourneyView, journeyPlaying, mode]);
+
+  useEffect(() => {
+    if (mode !== "journey" || !flowJourneyView) return;
+    const step = flowJourneyView.steps[journeyStepIndex];
+    if (!step) return;
+    const frame = window.requestAnimationFrame(() => {
+      setSelectedEntityId(step.entityId);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [flowJourneyView, journeyStepIndex, mode]);
+
+  useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      const isTyping =
-        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      const isInteractive = Boolean(
+        target?.closest(
+          'button, a, input, select, textarea, [role="button"], [contenteditable="true"]',
+        ),
+      );
+      const hasModifier = event.metaKey || event.ctrlKey || event.altKey;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         searchInput.current?.focus();
         setSearchOpen(true);
       }
-      if (!isTyping && event.key.toLowerCase() === "f" && selectedEntityId) {
-        setFocusEntityId(undefined);
-        window.requestAnimationFrame(() =>
-          setFocusEntityId(selectedEntityId),
-        );
-      }
-      if (!isTyping && event.code === "Space" && mode === "replay") {
+      if (
+        !isInteractive &&
+        !hasModifier &&
+        !event.repeat &&
+        event.code === "Space" &&
+        (mode === "replay" || mode === "journey")
+      ) {
         event.preventDefault();
-        setIsPlaying((value) => !value);
+        if (mode === "replay") setIsPlaying((value) => !value);
+        else setJourneyPlaying((value) => !value);
+      }
+      if (
+        !isInteractive &&
+        !hasModifier &&
+        !event.repeat &&
+        mode === "journey" &&
+        (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      ) {
+        event.preventDefault();
+        setJourneyPlaying(false);
+        const direction = event.key === "ArrowLeft" ? -1 : 1;
+        setJourneyStepIndex((current) => {
+          const count = flowJourneyView?.steps.length ?? 1;
+          return (current + direction + count) % count;
+        });
+      }
+      if (
+        !isInteractive &&
+        !hasModifier &&
+        !event.repeat &&
+        event.key.toLowerCase() === "h"
+      ) {
+        setHudVisible((value) => !value);
       }
       if (event.key === "Escape") {
         setSearchOpen(false);
         setProjectOpen(false);
         setLayersOpen(false);
+        if (mode === "journey") setFollowJourney(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mode, selectedEntityId]);
+  }, [flowJourneyView, mode]);
 
   function selectEntity(entityId: string) {
     setSelectedEntityId(entityId);
@@ -737,13 +1100,40 @@ export function RepoCityApp() {
   }
 
   function switchMode(nextMode: Mode) {
+    if (
+      nextMode === "journey" &&
+      flowSimulation.journeys.length === 0
+    ) {
+      return;
+    }
     setMode(nextMode);
     setIsPlaying(false);
-    if (nextMode === "explore") {
+    if (nextMode === "journey") {
+      setCommitIndex(commits.length - 1);
+      setJourneyPlaying(!prefersReducedMotion);
+    } else if (nextMode === "explore") {
       setCommitIndex(commits.length - 1);
     } else if (mode !== "replay") {
       setCommitIndex(0);
     }
+  }
+
+  function selectJourneyStep(index: number) {
+    if (!flowJourneyView) return;
+    setJourneyPlaying(false);
+    setJourneyStepIndex(
+      Math.min(Math.max(0, index), flowJourneyView.steps.length - 1),
+    );
+  }
+
+  function stepJourney(direction: -1 | 1) {
+    if (!flowJourneyView?.steps.length) return;
+    setJourneyPlaying(false);
+    setJourneyStepIndex(
+      (current) =>
+        (current + direction + flowJourneyView.steps.length) %
+        flowJourneyView.steps.length,
+    );
   }
 
   function toggleDistrict(districtId: string) {
@@ -761,8 +1151,18 @@ export function RepoCityApp() {
     window.setTimeout(() => setCopiedSha(false), 1200);
   }
 
+  const activeTimePreset =
+    timePresets.find((preset) => preset.id === timePreset) ?? timePresets[1];
+
+  function cycleTimePreset() {
+    const currentIndex = timePresets.findIndex(
+      (preset) => preset.id === timePreset,
+    );
+    setTimePreset(timePresets[(currentIndex + 1) % timePresets.length].id);
+  }
+
   return (
-    <main className="repo-app">
+    <main className={`repo-app ${hudVisible ? "" : "hud-hidden"}`}>
       <header className="topbar">
         <button
           type="button"
@@ -795,7 +1195,7 @@ export function RepoCityApp() {
           </span>
           <span className="branch-label">
             <GitBranch size={12} />
-            main
+            {manifest.repo.defaultBranch}
           </span>
           <ChevronDown size={14} />
         </button>
@@ -864,18 +1264,35 @@ export function RepoCityApp() {
           )}
         </div>
 
-        <div className="mode-switch" aria-label="浏览模式">
+        <div className="mode-switch" role="group" aria-label="浏览模式">
           <button
             type="button"
             className={mode === "explore" ? "active" : ""}
+            aria-pressed={mode === "explore"}
             onClick={() => switchMode("explore")}
           >
-            <Map size={14} />
+            <MapIcon size={14} />
             探索
           </button>
           <button
             type="button"
+            className={mode === "journey" ? "active" : ""}
+            aria-pressed={mode === "journey"}
+            disabled={flowSimulation.journeys.length === 0}
+            onClick={() => switchMode("journey")}
+            title={
+              flowSimulation.journeys.length === 0
+                ? "当前 HEAD 没有可生成的数据旅程"
+                : undefined
+            }
+          >
+            <Route size={14} />
+            流动
+          </button>
+          <button
+            type="button"
             className={mode === "replay" ? "active" : ""}
+            aria-pressed={mode === "replay"}
             onClick={() => switchMode("replay")}
           >
             <History size={14} />
@@ -888,18 +1305,27 @@ export function RepoCityApp() {
             <button
               className={`toolbar-button ${layersOpen ? "active" : ""}`}
               type="button"
+              aria-expanded={layersOpen}
+              aria-controls="city-layer-popover"
               onClick={() => setLayersOpen((value) => !value)}
             >
               <Layers3 size={15} />
               视图
             </button>
             {layersOpen && (
-              <div className="layer-popover">
+              <div className="layer-popover" id="city-layer-popover">
                 <div>
                   <span>城区图层</span>
-                  <small>{districts.length - hiddenDistricts.size}/{districts.length} 可见</small>
+                  <small>
+                    {
+                      visibleDistricts.filter(
+                        (district) => !hiddenDistricts.has(district.id),
+                      ).length
+                    }
+                    /{visibleDistricts.length} 可见
+                  </small>
                 </div>
-                {districts.map((district) => (
+                {visibleDistricts.map((district) => (
                   <label key={district.id}>
                     <input
                       type="checkbox"
@@ -913,15 +1339,58 @@ export function RepoCityApp() {
                     {district.name}
                   </label>
                 ))}
+                <div className="layer-section-title">
+                  AMBIENT / 环境活动
+                </div>
+                <p className="ambient-layer-note">
+                  仅营造城市尺度，不代表代码事实；流动模式会自动隐藏。
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showTraffic}
+                    onChange={(event) => setShowTraffic(event.target.checked)}
+                  />
+                  <Car size={13} />
+                  环境车辆
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={showPedestrians}
+                    onChange={(event) =>
+                      setShowPedestrians(event.target.checked)
+                    }
+                  />
+                  <Users size={13} />
+                  环境行人
+                </label>
+                <label className={cityCapabilities.waterTraffic ? "" : "is-disabled"}>
+                  <input
+                    type="checkbox"
+                    checked={showWaterTraffic}
+                    disabled={!cityCapabilities.waterTraffic}
+                    onChange={(event) =>
+                      setShowWaterTraffic(event.target.checked)
+                    }
+                  />
+                  <Ship size={13} />
+                  {cityCapabilities.waterTraffic
+                    ? "环境船只"
+                    : "此城市无水路"}
+                </label>
               </div>
             )}
           </div>
           <button
-            className="icon-button settings-button"
+            className="toolbar-button time-button"
             type="button"
-            aria-label="设置"
+            onClick={cycleTimePreset}
+            aria-label={`当前为${activeTimePreset.label}，切换城市时间`}
+            title="切换昼夜"
           >
-            <Settings2 size={17} />
+            <Sun size={15} />
+            {activeTimePreset.hour.toString().padStart(2, "0")}:00
           </button>
           <button
             className="add-project-button"
@@ -935,7 +1404,7 @@ export function RepoCityApp() {
       </header>
 
       <section className="workspace">
-        <aside className="map-panel">
+        <aside className="map-panel" aria-hidden={!hudVisible}>
           <div className="map-panel-head">
             <div>
               <span className="eyebrow">CITY ATLAS</span>
@@ -951,8 +1420,8 @@ export function RepoCityApp() {
             </button>
           </div>
           <div className="district-list">
-            {districts.map((district) => {
-              const count = entities.filter(
+            {visibleDistricts.map((district) => {
+              const count = visibleEntities.filter(
                 (entity) => entity.districtId === district.id,
               ).length;
               const hidden = hiddenDistricts.has(district.id);
@@ -982,28 +1451,65 @@ export function RepoCityApp() {
             })}
           </div>
           <div className="legend">
-            <div className="section-label">
-              <Zap size={13} />
-              城市图例
-            </div>
-            <p>
-              <span className="legend-height" />
-              高度 = 当前 LOC / 历史峰值
-            </p>
-            <p>
-              <span className="legend-footprint" />
-              占地 = log(历史最大 LOC)
-            </p>
-            <div className="role-legend">
-              {(Object.keys(roleLabels) as FileRole[])
-                .slice(0, 5)
-                .map((role) => (
-                  <span key={role}>
-                    <i style={{ background: roleColors[role] }} />
-                    {roleLabels[role]}
+            {mode === "journey" ? (
+              <>
+                <div className="section-label">
+                  <Route size={13} />
+                  数据交通图例
+                </div>
+                <div className="flow-legend">
+                  <span>
+                    <i style={{ background: "#78f1c7" }} />
+                    建筑内人流
                   </span>
-                ))}
-            </div>
+                  <span>
+                    <i style={{ background: "#67c9ff" }} />
+                    同步请求车
+                  </span>
+                  <span>
+                    <i style={{ background: "#b696ff" }} />
+                    历史 / 流水线列车
+                  </span>
+                  <span>
+                    <i style={{ background: "#ffb35d" }} />
+                    Bundle 货运
+                  </span>
+                  <span>
+                    <i style={{ background: "#4ce0e7" }} />
+                    静态产物 / 异步水运
+                  </span>
+                </div>
+                <p className="flow-legend-note">
+                  道路来自静态依赖；流动车辆只来自当前确定性场景，
+                  模拟密度不是生产流量。
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="section-label">
+                  <Zap size={13} />
+                  城市图例
+                </div>
+                <p>
+                  <span className="legend-height" />
+                  高度 = 当前 LOC / 历史峰值
+                </p>
+                <p>
+                  <span className="legend-footprint" />
+                  占地 = log(历史最大 LOC)
+                </p>
+                <div className="role-legend">
+                  {(Object.keys(roleLabels) as FileRole[])
+                    .slice(0, 5)
+                    .map((role) => (
+                      <span key={role}>
+                        <i style={{ background: roleColors[role] }} />
+                        {roleLabels[role]}
+                      </span>
+                    ))}
+                </div>
+              </>
+            )}
           </div>
           <div className="privacy-card">
             <span className="privacy-pulse" />
@@ -1016,30 +1522,91 @@ export function RepoCityApp() {
 
         <div className="city-stage">
           <CityScene
-            entities={filteredEntities}
+            cityPlan={livingCityPlan}
+            semanticCityPlan={semanticCityPlan}
+            semanticFlowProjection={semanticFlowProjection}
+            entities={entities}
             relations={relations}
-            districts={districts.filter(
-              (district) => !hiddenDistricts.has(district.id),
-            )}
-            commitIndex={commitIndex}
-            changedEntityIds={currentCommit.changedEntityIds}
-            selectedEntityId={selectedEntityId}
+            districts={districts}
+            hiddenDistrictIds={hiddenDistricts}
+            activeRelationIds={replayFrame.activeRelationIds}
+            commitIndex={mode === "replay" ? replayFrame.commitIndex : null}
+            entityFrameStates={replayFrame.entityFrameStates}
+            changedEntityIds={replayFrame.changedEntityIds}
+            selectedEntityId={effectiveSelectedEntityId}
             onSelectEntity={selectEntity}
             focusEntityId={focusEntityId}
             followConstruction={mode === "replay" && followConstruction}
+            timeOfDay={activeTimePreset.hour}
+            showTraffic={mode !== "journey" && showTraffic}
+            showPedestrians={mode !== "journey" && showPedestrians}
+            showWaterTraffic={mode !== "journey" && showWaterTraffic}
+            flowJourney={mode === "journey" ? flowJourneyView : null}
+            flowFollow={mode === "journey" && followJourney}
+            flowStepIndex={journeyStepIndex}
+            flowPlaying={mode === "journey" && journeyPlaying}
           />
           <div className="stage-vignette" />
+          <button
+            className="hud-toggle-button"
+            type="button"
+            onClick={() => setHudVisible((value) => !value)}
+            aria-label={hudVisible ? "隐藏界面" : "显示界面"}
+            title="快捷键 H"
+          >
+            {hudVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+            <span>{hudVisible ? "隐藏 HUD" : "显示 HUD"}</span>
+            <kbd>H</kbd>
+          </button>
           <div className="city-status">
             <span className="live-dot" />
             <span>
-              <small>{mode === "replay" ? "REPLAY STATE" : "HEAD SNAPSHOT"}</small>
+              <small>
+                {mode === "replay"
+                  ? "REPLAY STATE"
+                  : mode === "journey"
+                    ? "FLOW SIMULATION"
+                    : "HEAD SNAPSHOT"}
+              </small>
               <strong>
                 {mode === "replay"
                   ? `建设阶段 ${commitIndex + 1}/${commits.length}`
-                  : "城市已同步"}
+                  : mode === "journey"
+                    ? flowJourneyView
+                      ? `数据旅程 ${journeyStepIndex + 1}/${flowJourneyView.steps.length}`
+                      : "当前 HEAD 无可生成旅程"
+                    : "城市已同步"}
               </strong>
             </span>
           </div>
+          {mode === "journey" && activeFlowJourney ? (
+            <label className="journey-selector">
+              <span>
+                <Route size={12} />
+                DATA JOURNEY
+              </span>
+              <select
+                value={activeFlowJourney.id}
+                onChange={(event) => {
+                  setActiveJourneyId(event.target.value);
+                  setJourneyStepIndex(0);
+                  setJourneyPlaying(!prefersReducedMotion);
+                }}
+                aria-label="选择数据旅程"
+              >
+                {flowSimulation.journeys.map((journey) => (
+                  <option key={journey.id} value={journey.id}>
+                    {journey.title}
+                  </option>
+                ))}
+              </select>
+              <em>
+                {activeFlowJourney.provenance === "simulated"
+                  ? "确定性模拟"
+                  : "静态推导"}
+              </em>
+            </label>
+          ) : null}
           <div className="camera-hint">
             <span>左键旋转</span>
             <i />
@@ -1051,16 +1618,20 @@ export function RepoCityApp() {
           </div>
           <div className="city-stats">
             <div>
-              <strong>{manifest.stats.entityCount}</strong>
-              <span>建筑</span>
+              <strong>{visibleEntities.length}</strong>
+              <span>{mode === "journey" ? "文件事实" : "建筑"}</span>
             </div>
             <div>
-              <strong>{manifest.stats.districtCount}</strong>
-              <span>城区</span>
+              <strong>
+                {mode === "journey"
+                  ? semanticCityPlan.components.length
+                  : visibleDistrictIds.size}
+              </strong>
+              <span>{mode === "journey" ? "职责园区" : "城区"}</span>
             </div>
             <div>
-              <strong>{metric(relations.length)}</strong>
-              <span>关系</span>
+              <strong>{metric(replayFrame.activeRelationIds.size)}</strong>
+              <span>{mode === "journey" ? "静态关系" : "关系"}</span>
             </div>
           </div>
           {mode === "replay" && (
@@ -1079,7 +1650,7 @@ export function RepoCityApp() {
           )}
         </div>
 
-        <aside className="inspector-panel">
+        <aside className="inspector-panel" aria-hidden={!hudVisible}>
           {selectedEntity ? (
             <Inspector
               entity={selectedEntity}
@@ -1090,6 +1661,8 @@ export function RepoCityApp() {
               onSelect={focusEntity}
               currentCommitIndex={commitIndex}
               project={project}
+              activeRelationIds={replayFrame.activeRelationIds}
+              visibleEntityIds={visibleEntityIds}
             />
           ) : (
             <EmptyInspector onOpenProject={() => setProjectOpen(true)} />
@@ -1097,7 +1670,22 @@ export function RepoCityApp() {
         </aside>
       </section>
 
-      <footer className={`timeline ${mode === "replay" ? "is-active" : ""}`}>
+      {mode === "journey" && flowJourneyView ? (
+        <FlowJourneyConsole
+          activeStepIndex={journeyStepIndex}
+          follow={followJourney}
+          journey={flowJourneyView}
+          playing={journeyPlaying}
+          onSelectStep={selectJourneyStep}
+          onStep={stepJourney}
+          onToggleFollow={() => setFollowJourney((value) => !value)}
+          onTogglePlaying={() => setJourneyPlaying((value) => !value)}
+        />
+      ) : (
+        <footer
+          className={`timeline ${mode === "replay" ? "is-active" : ""}`}
+          aria-hidden={!hudVisible}
+        >
         <div className="playback-controls">
           <button
             className="play-button"
@@ -1229,7 +1817,8 @@ export function RepoCityApp() {
             ))}
           </div>
         </div>
-      </footer>
+        </footer>
+      )}
 
       {projectOpen && (
         <ProjectDialog

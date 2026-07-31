@@ -99,7 +99,43 @@ const chapters = [
   },
 ];
 
-function createFetch(overrides: Record<string, unknown> = {}) {
+const initialMetrics = {
+  loc: 12,
+  exports: 1,
+  fanIn: 0,
+  fanOut: 0,
+};
+
+const deltas = [
+  {
+    commitIndex: 0,
+    entityChanges: [
+      {
+        op: "spawn",
+        entityId: "entity-1",
+        metrics: initialMetrics,
+      },
+    ],
+    relationChanges: [],
+  },
+];
+
+const initialKeyframe = {
+  commitIndex: 0,
+  entities: {
+    "entity-1": {
+      entityId: "entity-1",
+      path: "packages/core/index.ts",
+      metrics: initialMetrics,
+    },
+  },
+  relationIds: [],
+};
+
+function createFetch(
+  overrides: Record<string, unknown> = {},
+  options: { includeKeyframe?: boolean } = {},
+) {
   const payloads: Record<string, unknown> = {
     "/projects/sample/manifest.json": manifest,
     "/projects/sample/data/districts.json": districts,
@@ -107,6 +143,13 @@ function createFetch(overrides: Record<string, unknown> = {}) {
     "/projects/sample/data/relations.json": relations,
     "/projects/sample/data/commits.json": commits,
     "/projects/sample/data/chapters.json": chapters,
+    "/projects/sample/data/deltas.ndjson":
+      `${deltas.map((delta) => JSON.stringify(delta)).join("\n")}\n`,
+    ...(options.includeKeyframe === false
+      ? {}
+      : {
+          "/projects/sample/data/keyframes/0000.json": initialKeyframe,
+        }),
     ...overrides,
   };
 
@@ -115,7 +158,12 @@ function createFetch(overrides: Record<string, unknown> = {}) {
     if (!(url in payloads)) {
       return new Response(null, { status: 404, statusText: "Not Found" });
     }
-    return Response.json(payloads[url]);
+    const payload = payloads[url];
+    return typeof payload === "string"
+      ? new Response(payload, {
+          headers: { "content-type": "application/x-ndjson" },
+        })
+      : Response.json(payload);
   });
 }
 
@@ -127,7 +175,7 @@ describe("loadProjectBundle", () => {
       fetch: fetchImpl,
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(fetchImpl).toHaveBeenCalledTimes(8);
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
       "/projects/sample/manifest.json",
     );
@@ -137,6 +185,8 @@ describe("loadProjectBundle", () => {
       "/projects/sample/data/relations.json",
       "/projects/sample/data/commits.json",
       "/projects/sample/data/chapters.json",
+      "/projects/sample/data/deltas.ndjson",
+      "/projects/sample/data/keyframes/0000.json",
     ]);
 
     expect(project.manifest).not.toHaveProperty("files");
@@ -165,6 +215,78 @@ describe("loadProjectBundle", () => {
       start: 0,
       end: 0,
     });
+    expect(project.canonicalEntities).toEqual(entities);
+    expect(project.canonicalRelations).toEqual(relations);
+    expect(project.deltas).toEqual(deltas);
+    expect(project.keyframes).toEqual([initialKeyframe]);
+  });
+
+  it("accepts a missing initial keyframe", async () => {
+    const project = await loadProjectBundle("/projects/sample", {
+      fetch: createFetch({}, { includeKeyframe: false }),
+    });
+
+    expect(project.deltas).toEqual(deltas);
+    expect(project.keyframes).toEqual([]);
+  });
+
+  it("reports malformed NDJSON with its source line", async () => {
+    const fetchImpl = createFetch({
+      "/projects/sample/data/deltas.ndjson":
+        `${JSON.stringify(deltas[0])}\n{"commitIndex":`,
+    });
+
+    await expect(
+      loadProjectBundle("/projects/sample", { fetch: fetchImpl }),
+    ).rejects.toMatchObject({
+      name: "ProjectBundleError",
+      resource: "deltas",
+      url: "/projects/sample/data/deltas.ndjson",
+    });
+    await expect(
+      loadProjectBundle("/projects/sample", { fetch: fetchImpl }),
+    ).rejects.toThrow(/invalid NDJSON at line 2/i);
+  });
+
+  it("validates each NDJSON replay delta", async () => {
+    const fetchImpl = createFetch({
+      "/projects/sample/data/deltas.ndjson": JSON.stringify({
+        commitIndex: 0,
+        entityChanges: [{ op: "explode", entityId: "entity-1" }],
+        relationChanges: [],
+      }),
+    });
+
+    await expect(
+      loadProjectBundle("/projects/sample", { fetch: fetchImpl }),
+    ).rejects.toMatchObject({
+      name: "ProjectBundleError",
+      resource: "deltas",
+      url: "/projects/sample/data/deltas.ndjson",
+    });
+    await expect(
+      loadProjectBundle("/projects/sample", { fetch: fetchImpl }),
+    ).rejects.toThrow(/schema validation failed at line 1/i);
+  });
+
+  it("rejects an invalid initial keyframe instead of hiding it", async () => {
+    const fetchImpl = createFetch({
+      "/projects/sample/data/keyframes/0000.json": {
+        ...initialKeyframe,
+        commitIndex: -2,
+      },
+    });
+
+    await expect(
+      loadProjectBundle("/projects/sample", { fetch: fetchImpl }),
+    ).rejects.toMatchObject({
+      name: "ProjectBundleError",
+      resource: "keyframe",
+      url: "/projects/sample/data/keyframes/0000.json",
+    });
+    await expect(
+      loadProjectBundle("/projects/sample", { fetch: fetchImpl }),
+    ).rejects.toThrow(/keyframe.*commitIndex/i);
   });
 
   it("reports the resource, URL and schema path for invalid data", async () => {
