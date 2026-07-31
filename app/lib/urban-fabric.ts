@@ -276,11 +276,13 @@ interface ParcelDraft extends Omit<UrbanParcel, "buildingId"> {
   typology: UrbanBuildingTypology;
 }
 
-const BLOCK_WIDTH = 9.8;
-const BLOCK_DEPTH = 8.2;
-const STREET_GAP = 3.2;
-const WATERFRONT_GAP = 2.2;
-const BUILDING_SETBACK = 0.55;
+// V4.1 uses one world unit as three metres. These dimensions yield compact
+// Chicago half-blocks, 10–16 metre streets and believable 3.1–3.7 metre floors.
+const BLOCK_WIDTH = 18;
+const BLOCK_DEPTH = 14;
+const STREET_GAP = 5.6;
+const WATERFRONT_GAP = 3;
+const BUILDING_SETBACK = 0.7;
 const BLOCK_COLUMNS = 3;
 
 const MATERIALS: readonly UrbanMaterialKey[] = [
@@ -411,12 +413,12 @@ function streetClass(hierarchy: UrbanStreetHierarchy): {
   lanes: number;
 } {
   if (hierarchy === "primary") {
-    return { roadClass: "arterial", width: 3.7, lanes: 4 };
+    return { roadClass: "arterial", width: 5.2, lanes: 4 };
   }
   if (hierarchy === "secondary") {
-    return { roadClass: "collector", width: 2.7, lanes: 2 };
+    return { roadClass: "collector", width: 4.2, lanes: 2 };
   }
-  return { roadClass: "local", width: 1.8, lanes: 2 };
+  return { roadClass: "local", width: 3.4, lanes: 2 };
 }
 
 function makeStreet(

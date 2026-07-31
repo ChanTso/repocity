@@ -51,6 +51,7 @@ import {
   projectUrbanJourneyLeg,
   type UrbanFabricPlan,
 } from "@/app/lib/urban-fabric";
+import type { VisualCityPlan } from "@/app/lib/visual-city";
 import {
   getFacilityLabel,
   LivingCityBuildings,
@@ -89,6 +90,8 @@ export interface CitySceneProps {
   semanticCityPlan?: SemanticCityPlan;
   /** Road-first spatial projection used by the Flow experience. */
   urbanFabricPlan?: UrbanFabricPlan;
+  /** Non-semantic V4.1 hero framing and contextual city projection. */
+  visualCityPlan?: VisualCityPlan;
   /** Explicit journey agents projected onto semantic infrastructure. */
   semanticFlowProjection?: SemanticFlowProjection | null;
   commitIndex?: number | null;
@@ -142,6 +145,7 @@ export function CityScene({
   cityPlan,
   semanticCityPlan,
   urbanFabricPlan,
+  visualCityPlan,
   semanticFlowProjection,
   commitIndex,
   entityFrameStates,
@@ -205,10 +209,10 @@ export function CityScene({
   );
   const bounds = useMemo(
     () =>
-      flowJourney && semanticCityPlan
-        ? getSemanticMetropolisBounds(semanticCityPlan, urbanFabricPlan)
+      semanticCityPlan && urbanFabricPlan
+        ? getSemanticMetropolisBounds(semanticCityPlan, urbanFabricPlan, visualCityPlan)
         : getLivingCityBounds(plan),
-    [flowJourney, plan, semanticCityPlan, urbanFabricPlan],
+    [plan, semanticCityPlan, urbanFabricPlan, visualCityPlan],
   );
   const hiddenDistrictSet = useMemo(
     () => new Set<string>(hiddenDistrictIds),
@@ -323,13 +327,20 @@ export function CityScene({
   }, [requestFocus, selectedEntityId]);
 
   const initialCameraPosition = useMemo<[number, number, number]>(() => {
-    const distance = Math.max(18, bounds.radius * 1.32);
+    const distance = Math.max(18, bounds.radius * (visualCityPlan ? 1.62 : 1.32));
+    if (visualCityPlan) {
+      return [
+        visualCityPlan.hero.cameraTarget.x - distance * 0.86,
+        Math.max(bounds.maxHeight * 0.9, distance * 0.68),
+        visualCityPlan.hero.cameraTarget.z + distance * 0.92,
+      ];
+    }
     return [
       bounds.centerX + distance * 0.78,
       Math.max(bounds.maxHeight * 0.88, distance * 0.64),
       bounds.centerZ + distance * 0.86,
     ];
-  }, [bounds]);
+  }, [bounds, visualCityPlan]);
 
   return (
     <div
@@ -390,6 +401,7 @@ export function CityScene({
           plan={plan}
           semanticCityPlan={semanticCityPlan}
           urbanFabricPlan={urbanFabricPlan}
+          visualCityPlan={visualCityPlan}
           semanticFlowProjection={semanticFlowProjection}
           pulseSignature={pulseSignature}
           relations={relations}
@@ -412,6 +424,7 @@ interface SceneContentsProps {
   plan: LivingCityPlan;
   semanticCityPlan?: SemanticCityPlan;
   urbanFabricPlan?: UrbanFabricPlan;
+  visualCityPlan?: VisualCityPlan;
   semanticFlowProjection?: SemanticFlowProjection | null;
   bounds: LivingCityRenderBounds;
   entities: readonly CitySceneEntity[];
@@ -452,20 +465,26 @@ interface JourneyCameraFocus {
 function getSemanticMetropolisBounds(
   plan: SemanticCityPlan,
   urbanFabric?: UrbanFabricPlan,
+  visualCity?: VisualCityPlan,
 ): LivingCityRenderBounds {
   if (urbanFabric && urbanFabric.blocks.length > 0) {
-    const { bounds } = urbanFabric;
+    const bounds = visualCity?.hero.bounds ?? urbanFabric.bounds;
+    const heroIds = new Set(visualCity?.hero.blockIds ?? []);
     const maxHeight = Math.max(
       8,
-      ...urbanFabric.buildings.map((building) => building.height),
+      ...urbanFabric.architecturalEnvelopes
+        .filter((building) => heroIds.size === 0 || heroIds.has(building.blockId))
+        .map((building) => building.height),
     );
+    const centerX = visualCity?.hero.cameraTarget.x ?? bounds.x;
+    const centerZ = visualCity?.hero.cameraTarget.z ?? bounds.z;
     return {
       minX: bounds.minX,
       maxX: bounds.maxX,
       minZ: bounds.minZ,
       maxZ: bounds.maxZ,
-      centerX: bounds.x,
-      centerZ: bounds.z,
+      centerX,
+      centerZ,
       width: bounds.width,
       depth: bounds.depth,
       maxHeight,
@@ -533,6 +552,7 @@ function SceneContents({
   plan,
   semanticCityPlan,
   urbanFabricPlan,
+  visualCityPlan,
   semanticFlowProjection,
   bounds,
   entities,
@@ -872,7 +892,7 @@ function SceneContents({
         />
       ) : null}
 
-      {flowJourney && semanticCityPlan ? (
+      {semanticCityPlan && urbanFabricPlan ? (
         <SemanticMetropolis
           activeComponentIds={flowComponentIds}
           // FlowJourneyLayer is the single renderer for scenario tokens.
@@ -881,6 +901,7 @@ function SceneContents({
           mobilityRoutes={NO_SEMANTIC_MOBILITY}
           plan={semanticCityPlan}
           urbanFabric={urbanFabricPlan}
+          visualCity={visualCityPlan}
           onHoverEntity={onHoverEntity}
           onSelectEntity={onSelectEntity}
           playing={flowPlaying}
@@ -936,7 +957,7 @@ function SceneContents({
         />
       ) : null}
 
-      {!flowJourney ? (
+      {!flowJourney && !(semanticCityPlan && urbanFabricPlan) ? (
         <DependencyLines
           activeRelationIds={activeRelationIds}
           buildingByEntityId={buildingByEntityId}
@@ -948,7 +969,7 @@ function SceneContents({
         />
       ) : null}
 
-      {!flowJourney && selectedBuilding ? (
+      {!flowJourney && !(semanticCityPlan && urbanFabricPlan) && selectedBuilding ? (
         <BuildingMarker
           building={selectedBuilding}
           color={CITY_SCENE_COLORS.selection}
@@ -956,7 +977,7 @@ function SceneContents({
           kind="selected"
         />
       ) : null}
-      {!flowJourney && hoveredBuilding ? (
+      {!flowJourney && !(semanticCityPlan && urbanFabricPlan) && hoveredBuilding ? (
         <BuildingMarker
           building={hoveredBuilding}
           color={CITY_SCENE_COLORS.hover}
@@ -965,7 +986,7 @@ function SceneContents({
         />
       ) : null}
 
-      {!flowJourney && showEntityLabel && labelEntity ? (
+      {!flowJourney && !(semanticCityPlan && urbanFabricPlan) && showEntityLabel && labelEntity ? (
         <EntityLabel
           building={buildingByEntityId.get(labelEntity.id)!}
           entity={labelEntity}
@@ -991,6 +1012,7 @@ function SceneContents({
         journeyFocus={journeyCameraFocus}
         journeyActive={flowJourney !== null}
         targetHeight={targetHeight}
+        visualCity={visualCityPlan}
       />
     </>
   );
@@ -1342,6 +1364,7 @@ function CameraRig({
   journeyFocus,
   journeyActive,
   targetHeight,
+  visualCity,
 }: {
   bounds: LivingCityRenderBounds;
   cityKey: string;
@@ -1353,6 +1376,7 @@ function CameraRig({
   journeyFocus: JourneyCameraFocus | null;
   journeyActive: boolean;
   targetHeight: (entityId: string) => number;
+  visualCity?: VisualCityPlan;
 }) {
   const { camera } = useThree();
   const cameraAspect =
@@ -1362,21 +1386,86 @@ function CameraRig({
   const desiredPosition = useRef(new THREE.Vector3());
   const desiredTarget = useRef(new THREE.Vector3());
   const lastCityKey = useRef<string | null>(null);
+  const applyVisualBookmark = useCallback(
+    (bookmark: "overview" | "river" | "fulton" | "glass") => {
+      if (!visualCity || !controlsRef.current) return;
+      const distance = Math.max(18, bounds.radius * 1.62);
+      let target = new THREE.Vector3(
+        visualCity.hero.cameraTarget.x,
+        visualCity.hero.cameraTarget.y,
+        visualCity.hero.cameraTarget.z,
+      );
+      let position = new THREE.Vector3(
+        target.x - distance * 0.86,
+        Math.max(bounds.maxHeight * 0.9, distance * 0.68),
+        target.z + distance * 0.92,
+      );
+      if (bookmark === "river") {
+        target = new THREE.Vector3(
+          (visualCity.river.minX + visualCity.river.maxX) / 2,
+          2.4,
+          visualCity.hero.bounds.z,
+        );
+        position = new THREE.Vector3(
+          target.x - distance * 0.72,
+          distance * 0.48,
+          target.z + distance * 0.68,
+        );
+      } else if (bookmark === "fulton") {
+        const blocks = visualCity.hero.blocks.filter((block) =>
+          block.role.startsWith("fulton-brick"),
+        );
+        target = new THREE.Vector3(
+          blocks.reduce((sum, block) => sum + block.block.x, 0) / Math.max(1, blocks.length),
+          2.1,
+          blocks.reduce((sum, block) => sum + block.block.z, 0) / Math.max(1, blocks.length),
+        );
+        position = new THREE.Vector3(
+          target.x - distance * 0.42,
+          distance * 0.12,
+          target.z + distance * 0.22,
+        );
+      } else if (bookmark === "glass") {
+        const block = visualCity.hero.blocks.find(
+          (candidate) => candidate.role === "modern-glass-corner",
+        )?.block;
+        if (block) target = new THREE.Vector3(block.x, 7.2, block.z);
+        position = new THREE.Vector3(
+          target.x + distance * 0.44,
+          target.y + distance * 0.26,
+          target.z + distance * 0.34,
+        );
+      }
+      camera.position.copy(position);
+      controlsRef.current.target.copy(target);
+      controlsRef.current.update();
+      focusingRef.current = false;
+    },
+    [bounds.maxHeight, bounds.radius, camera, visualCity],
+  );
 
   useLayoutEffect(() => {
     if (lastCityKey.current === cityKey) return;
     lastCityKey.current = cityKey;
-    const distance = Math.max(18, bounds.radius * 1.32);
+    const distance = Math.max(18, bounds.radius * (visualCity ? 1.62 : 1.32));
     const target = new THREE.Vector3(
-      bounds.centerX,
-      Math.min(bounds.maxHeight * 0.18, distance * 0.1),
-      bounds.centerZ,
+      visualCity?.hero.cameraTarget.x ?? bounds.centerX,
+      visualCity?.hero.cameraTarget.y ?? Math.min(bounds.maxHeight * 0.18, distance * 0.1),
+      visualCity?.hero.cameraTarget.z ?? bounds.centerZ,
     );
-    camera.position.set(
-      bounds.centerX + distance * 0.78,
-      Math.max(bounds.maxHeight * 0.88, distance * 0.64),
-      bounds.centerZ + distance * 0.86,
-    );
+    if (visualCity) {
+      camera.position.set(
+        visualCity.hero.cameraTarget.x - distance * 0.86,
+        Math.max(bounds.maxHeight * 0.9, distance * 0.68),
+        visualCity.hero.cameraTarget.z + distance * 0.92,
+      );
+    } else {
+      camera.position.set(
+        bounds.centerX + distance * 0.78,
+        Math.max(bounds.maxHeight * 0.88, distance * 0.64),
+        bounds.centerZ + distance * 0.86,
+      );
+    }
     camera.lookAt(target);
     camera.updateProjectionMatrix();
     if (controlsRef.current) {
@@ -1384,7 +1473,7 @@ function CameraRig({
       controlsRef.current.update();
     }
     focusingRef.current = false;
-  }, [bounds, camera, cityKey]);
+  }, [bounds, camera, cityKey, visualCity]);
 
   const beginFocus = useCallback(
     (
@@ -1503,6 +1592,24 @@ function CameraRig({
       focusingRef.current = false;
     }
   }, [beginFocusBounds, journeyActive, journeyFocus]);
+  useEffect(() => {
+    if (!visualCity) return;
+    const handleBookmark = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+      const bookmark = ({
+        "1": "overview",
+        "2": "river",
+        "3": "fulton",
+        "4": "glass",
+      } as const)[event.key];
+      if (!bookmark) return;
+      event.preventDefault();
+      applyVisualBookmark(bookmark);
+    };
+    window.addEventListener("keydown", handleBookmark);
+    return () => window.removeEventListener("keydown", handleBookmark);
+  }, [applyVisualBookmark, visualCity]);
 
   useFrame((_, delta) => {
     const controls = controlsRef.current;
