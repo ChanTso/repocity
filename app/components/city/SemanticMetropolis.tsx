@@ -26,6 +26,8 @@ import type {
 } from "@/app/lib/visual-city";
 import { stableCityHash } from "@/app/lib/city-visuals";
 import { getTimeOfDayPalette } from "./living-city-render-utils";
+import { planAssetBackedHero } from "@/app/lib/asset-city";
+import { AssetBackedHero } from "./AssetBackedHero";
 
 const LAND_Y = 0;
 const ROAD_Y = 0.12;
@@ -166,6 +168,7 @@ export interface SemanticMetropolisProps {
   showTraffic?: boolean;
   showPedestrians?: boolean;
   showWaterTraffic?: boolean;
+  selectedEntityId?: string | null;
   /** Freezes semantic traffic without rebuilding any scene objects. */
   playing?: boolean;
   onHoverEntity?: (entityId: string | null) => void;
@@ -191,6 +194,7 @@ export function SemanticMetropolis({
   showTraffic = true,
   showPedestrians = true,
   showWaterTraffic = true,
+  selectedEntityId = null,
   playing = true,
   onHoverEntity,
   onSelectEntity,
@@ -199,6 +203,17 @@ export function SemanticMetropolis({
     () => getTimeOfDayPalette(timeOfDay),
     [timeOfDay],
   );
+  const assetBackedHero = useMemo(
+    () =>
+      urbanFabric && visualCity
+        ? planAssetBackedHero(urbanFabric, visualCity)
+        : null,
+    [urbanFabric, visualCity],
+  );
+  const replacedEnvelopeIds = useMemo(
+    () => new Set(assetBackedHero?.replacedEnvelopeIds ?? []),
+    [assetBackedHero],
+  );
   const campusGeometry = useMemo(
     () =>
       urbanFabric
@@ -206,20 +221,21 @@ export function SemanticMetropolis({
             urbanFabric,
             reservedEntityIds,
             activeComponentIds,
+            replacedEnvelopeIds,
           )
         : makeCampusGeometry(
             plan.campuses,
             reservedEntityIds,
             activeComponentIds,
           ),
-    [activeComponentIds, plan.campuses, reservedEntityIds, urbanFabric],
+    [activeComponentIds, plan.campuses, replacedEnvelopeIds, reservedEntityIds, urbanFabric],
   );
   const visualSliceGeometry = useMemo(
     () =>
       visualCity && urbanFabric
-        ? makeVisualSliceGeometry(visualCity, urbanFabric)
+        ? makeVisualSliceGeometry(visualCity, urbanFabric, replacedEnvelopeIds)
         : null,
-    [urbanFabric, visualCity],
+    [replacedEnvelopeIds, urbanFabric, visualCity],
   );
   const roadGeometry = useMemo(
     () => makeRoadGeometry(urbanFabric?.streets ?? plan.roads),
@@ -232,8 +248,9 @@ export function SemanticMetropolis({
           ? { ...plan, campuses: [], roads: urbanFabric.streets }
           : plan,
         roadGeometry.surfaceSamples,
+        visualCity?.hero.bounds,
       ),
-    [plan, roadGeometry.surfaceSamples, urbanFabric],
+    [plan, roadGeometry.surfaceSamples, urbanFabric, visualCity],
   );
   const displayBounds = useMemo(
     () =>
@@ -296,7 +313,15 @@ export function SemanticMetropolis({
       {visualSliceGeometry ? (
         <VisualSliceInstances geometry={visualSliceGeometry} night={palette.night} />
       ) : null}
-      {visualCity && urbanFabric ? (
+      {assetBackedHero ? (
+        <AssetBackedHero
+          onHoverEntity={onHoverEntity}
+          onSelectEntity={onSelectEntity}
+          plan={assetBackedHero}
+          selectedEntityId={selectedEntityId}
+        />
+      ) : null}
+      {visualCity && urbanFabric && !assetBackedHero ? (
         <HeroStorefrontSigns plan={urbanFabric} visualCity={visualCity} />
       ) : null}
 
@@ -489,6 +514,7 @@ function RenderDiagnostics({
 }) {
   const renderer = useThree((state) => state.gl);
   const smoothedFrameMs = useRef(16.7);
+  const outputRef = useRef<HTMLOutputElement>(null);
   useLayoutEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
     const target = window as Window & {
@@ -528,8 +554,22 @@ function RenderDiagnostics({
       storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
       facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
     };
+    const output = outputRef.current;
+    if (output) {
+      output.dataset.drawCalls = String(renderer.info.render.calls);
+      output.dataset.triangles = String(renderer.info.render.triangles);
+      output.dataset.geometries = String(renderer.info.memory.geometries);
+      output.dataset.textures = String(renderer.info.memory.textures);
+      output.dataset.programs = String(renderer.info.programs?.length ?? 0);
+      output.dataset.frameMs = smoothedFrameMs.current.toFixed(2);
+      output.dataset.fps = (1_000 / Math.max(0.01, smoothedFrameMs.current)).toFixed(1);
+    }
   });
-  return null;
+  return (
+    <Html style={{ display: "none" }}>
+      <output aria-hidden="true" data-repocity-render-metrics ref={outputRef} />
+    </Html>
+  );
 }
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
@@ -1232,7 +1272,13 @@ function addHeroFacade(
 function makeVisualSliceGeometry(
   visualCity: VisualCityPlan,
   urbanFabric: UrbanFabricPlan,
+  replacedEnvelopeIds: ReadonlySet<string>,
 ): VisualSliceGeometry {
+  const replacedBlockIds = new Set(
+    urbanFabric.architecturalEnvelopes
+      .filter((envelope) => replacedEnvelopeIds.has(envelope.id))
+      .map((envelope) => envelope.blockId),
+  );
   const geometry: VisualSliceGeometry = {
     contextGround: [],
     contextRoads: [],
@@ -1326,6 +1372,7 @@ function makeVisualSliceGeometry(
   for (const heroBlock of visualCity.hero.blocks) {
     const envelopes = (envelopesByBlockId.get(heroBlock.blockId) ?? []).sort((left, right) => left.id.localeCompare(right.id, "en"));
     for (const [index, envelope] of envelopes.entries()) {
+      if (replacedEnvelopeIds.has(envelope.id)) continue;
       const bonus = index === 0
         ? heroBlock.role === "civic-podium-tower"
           ? 10
@@ -1376,6 +1423,7 @@ function makeVisualSliceGeometry(
   }
   for (const storefront of urbanFabric.storefronts) {
     if (!heroByBlockId.has(storefront.blockId)) continue;
+    if (replacedEnvelopeIds.has(storefront.architecturalEnvelopeId)) continue;
     const side = storefront.edge === "north" || storefront.edge === "west" ? -1 : 1;
     const northSouth = storefront.edge === "north" || storefront.edge === "south";
     geometry.heroShopfronts.push({
@@ -1402,6 +1450,7 @@ function makeVisualSliceGeometry(
     });
   }
   for (const heroBlock of visualCity.hero.blocks) {
+    if (replacedBlockIds.has(heroBlock.blockId)) continue;
     const { block } = heroBlock;
     for (const side of [-1, 1] as const) {
       for (let index = -1; index <= 1; index += 1) {
@@ -1849,6 +1898,7 @@ function makeUrbanFabricGeometry(
   plan: UrbanFabricPlan,
   reservedEntityIds: ReadonlySet<string>,
   activeComponentIds: ReadonlySet<string> | null,
+  replacedEnvelopeIds: ReadonlySet<string> = EMPTY_ID_SET,
 ): CampusGeometry {
   const geometry = emptyCampusGeometry();
   const reservedBuildingIds = new Set(
@@ -1859,7 +1909,9 @@ function makeUrbanFabricGeometry(
   const visibleEnvelopeIds = new Set(
     plan.architecturalEnvelopes
       .filter(
-        (envelope) => !reservedBuildingIds.has(envelope.semanticBuildingId),
+        (envelope) =>
+          !reservedBuildingIds.has(envelope.semanticBuildingId) &&
+          !replacedEnvelopeIds.has(envelope.id),
       )
       .map((envelope) => envelope.id),
   );
@@ -3569,6 +3621,7 @@ function nearestDistanceIndex(
 function makeGreenGeometry(
   plan: SemanticCityPlan,
   roadSamples: readonly RoadSurfaceSample[],
+  excludeBounds?: { minX: number; maxX: number; minZ: number; maxZ: number },
 ) {
   const trunks: CylinderInstance[] = [];
   const crowns: BoxInstance[] = [];
@@ -3693,6 +3746,13 @@ function makeGreenGeometry(
         if (pointIsInWater(plan.terrain.waterBoundaries, x, z)) {
           continue;
         }
+        if (
+          excludeBounds &&
+          x >= excludeBounds.minX &&
+          x <= excludeBounds.maxX &&
+          z >= excludeBounds.minZ &&
+          z <= excludeBounds.maxZ
+        ) continue;
         const seed = stableCityHash(
           `${plan.seed}:${road.id}:avenue-tree:${treeIndex}:${side}`,
         );
@@ -3747,6 +3807,13 @@ function makeGreenGeometry(
           THREE.MathUtils.lerp(start.z, end.z, progress) +
           nz * (road.width / 2 + 0.48) * side;
         if (pointIsInWater(plan.terrain.waterBoundaries, x, z)) continue;
+        if (
+          excludeBounds &&
+          x >= excludeBounds.minX &&
+          x <= excludeBounds.maxX &&
+          z >= excludeBounds.minZ &&
+          z <= excludeBounds.maxZ
+        ) continue;
         lightPoles.push({
           x,
           y: CAMPUS_BASE_Y + 0.78,

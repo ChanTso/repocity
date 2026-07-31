@@ -7,7 +7,10 @@ import {
 } from "@react-three/fiber";
 import {
   Edges,
+  ContactShadows,
+  Environment,
   Html,
+  Lightformer,
   Line,
   OrbitControls,
   Sky,
@@ -52,6 +55,7 @@ import {
   type UrbanFabricPlan,
 } from "@/app/lib/urban-fabric";
 import type { VisualCityPlan } from "@/app/lib/visual-city";
+import { planAssetBackedHero } from "@/app/lib/asset-city";
 import {
   getFacilityLabel,
   LivingCityBuildings,
@@ -327,12 +331,12 @@ export function CityScene({
   }, [requestFocus, selectedEntityId]);
 
   const initialCameraPosition = useMemo<[number, number, number]>(() => {
-    const distance = Math.max(18, bounds.radius * (visualCityPlan ? 1.62 : 1.32));
+    const distance = Math.max(18, bounds.radius * (visualCityPlan ? 0.72 : 1.32));
     if (visualCityPlan) {
       return [
         visualCityPlan.hero.cameraTarget.x - distance * 0.86,
-        Math.max(bounds.maxHeight * 0.9, distance * 0.68),
-        visualCityPlan.hero.cameraTarget.z + distance * 0.92,
+        Math.max(bounds.maxHeight * 0.52, distance * 0.44),
+        visualCityPlan.hero.cameraTarget.z + distance * 0.76,
       ];
     }
     return [
@@ -371,6 +375,12 @@ export function CityScene({
           antialias: true,
           alpha: false,
           powerPreference: "high-performance",
+        }}
+        onCreated={({ gl }) => {
+          gl.outputColorSpace = THREE.SRGBColorSpace;
+          gl.toneMapping = THREE.ACESFilmicToneMapping;
+          gl.toneMappingExposure = 1.08;
+          gl.shadowMap.type = THREE.PCFSoftShadowMap;
         }}
         onPointerMissed={() => {
           hoverEntity(null);
@@ -825,8 +835,12 @@ function SceneContents({
       ? buildingByEntityId.get(hoveredEntityId)
       : undefined;
 
-  const fogNear = Math.max(35, bounds.radius * 1.65);
-  const fogFar = Math.max(110, bounds.radius * 5.2);
+  const fogNear = visualCityPlan
+    ? Math.max(150, bounds.radius * 5.5)
+    : Math.max(35, bounds.radius * 1.65);
+  const fogFar = visualCityPlan
+    ? Math.max(360, bounds.radius * 11)
+    : Math.max(110, bounds.radius * 5.2);
 
   return (
     <>
@@ -852,6 +866,30 @@ function SceneContents({
           speed={0.1}
         />
       )}
+      {visualCityPlan ? (
+        <Environment resolution={128}>
+          <Lightformer
+            color="#d9e7e4"
+            intensity={1.4}
+            position={[-18, 24, 12]}
+            rotation-x={-Math.PI / 2.6}
+            scale={[24, 18, 1]}
+          />
+          <Lightformer
+            color="#f2c998"
+            intensity={0.8}
+            position={[22, 10, -16]}
+            rotation-y={Math.PI / 2.8}
+            scale={[14, 8, 1]}
+          />
+          <Lightformer
+            color="#6e95a2"
+            intensity={0.55}
+            position={[0, 6, 24]}
+            scale={[18, 5, 1]}
+          />
+        </Environment>
+      ) : null}
       <hemisphereLight
         args={[
           palette.ambient,
@@ -891,6 +929,21 @@ function SceneContents({
           ]}
         />
       ) : null}
+      {visualCityPlan ? (
+        <ContactShadows
+          blur={2.4}
+          far={28}
+          frames={1}
+          opacity={0.24}
+          position={[
+            visualCityPlan.hero.cameraTarget.x,
+            0.245,
+            visualCityPlan.hero.cameraTarget.z,
+          ]}
+          resolution={512}
+          scale={Math.max(70, bounds.radius * 2.2)}
+        />
+      ) : null}
 
       {semanticCityPlan && urbanFabricPlan ? (
         <SemanticMetropolis
@@ -909,6 +962,7 @@ function SceneContents({
           // journey stops remain lightweight semantic beacons, so a ten-step
           // tour cannot hollow ten unrelated holes out of the metropolis.
           reservedEntityIds={activeFlowEntityIds ?? undefined}
+          selectedEntityId={selectedEntityId}
           showPedestrians
           showTraffic
           showWaterTraffic
@@ -1011,7 +1065,9 @@ function SceneContents({
         isRenderable={isRenderable}
         journeyFocus={journeyCameraFocus}
         journeyActive={flowJourney !== null}
+        onSelectEntity={onSelectEntity}
         targetHeight={targetHeight}
+        urbanFabric={urbanFabricPlan}
         visualCity={visualCityPlan}
       />
     </>
@@ -1363,7 +1419,9 @@ function CameraRig({
   isRenderable,
   journeyFocus,
   journeyActive,
+  onSelectEntity,
   targetHeight,
+  urbanFabric,
   visualCity,
 }: {
   bounds: LivingCityRenderBounds;
@@ -1375,7 +1433,9 @@ function CameraRig({
   isRenderable: (entityId: string) => boolean;
   journeyFocus: JourneyCameraFocus | null;
   journeyActive: boolean;
+  onSelectEntity: (entityId: string) => void;
   targetHeight: (entityId: string) => number;
+  urbanFabric?: UrbanFabricPlan;
   visualCity?: VisualCityPlan;
 }) {
   const { camera } = useThree();
@@ -1386,54 +1446,75 @@ function CameraRig({
   const desiredPosition = useRef(new THREE.Vector3());
   const desiredTarget = useRef(new THREE.Vector3());
   const lastCityKey = useRef<string | null>(null);
+  const assetHero = useMemo(
+    () => urbanFabric && visualCity ? planAssetBackedHero(urbanFabric, visualCity) : null,
+    [urbanFabric, visualCity],
+  );
   const applyVisualBookmark = useCallback(
-    (bookmark: "overview" | "river" | "fulton" | "glass") => {
+    (bookmark: "overview" | "river" | "fulton" | "glass" | "selection") => {
       if (!visualCity || !controlsRef.current) return;
-      const distance = Math.max(18, bounds.radius * 1.62);
-      let target = new THREE.Vector3(
-        visualCity.hero.cameraTarget.x,
-        visualCity.hero.cameraTarget.y,
-        visualCity.hero.cameraTarget.z,
-      );
+      const buildings = assetHero?.buildings ?? [];
+      const average = buildings.length > 0
+        ? buildings.reduce(
+            (sum, building) => sum.add(new THREE.Vector3(building.x, 0, building.z)),
+            new THREE.Vector3(),
+          ).multiplyScalar(1 / buildings.length)
+        : new THREE.Vector3(
+            visualCity.hero.cameraTarget.x,
+            0,
+            visualCity.hero.cameraTarget.z,
+          );
+      let target = new THREE.Vector3(average.x, 3.1, average.z);
       let position = new THREE.Vector3(
-        target.x - distance * 0.86,
-        Math.max(bounds.maxHeight * 0.9, distance * 0.68),
-        target.z + distance * 0.92,
+        target.x - Math.max(14, bounds.radius * 0.48),
+        target.y + Math.max(7, bounds.radius * 0.22),
+        target.z + Math.max(13, bounds.radius * 0.43),
       );
       if (bookmark === "river") {
         target = new THREE.Vector3(
           (visualCity.river.minX + visualCity.river.maxX) / 2,
-          2.4,
+          1.8,
           visualCity.hero.bounds.z,
         );
         position = new THREE.Vector3(
-          target.x - distance * 0.72,
-          distance * 0.48,
-          target.z + distance * 0.68,
+          target.x,
+          target.y + 8.2,
+          target.z + 26,
         );
       } else if (bookmark === "fulton") {
-        const blocks = visualCity.hero.blocks.filter((block) =>
-          block.role.startsWith("fulton-brick"),
-        );
-        target = new THREE.Vector3(
-          blocks.reduce((sum, block) => sum + block.block.x, 0) / Math.max(1, blocks.length),
-          2.1,
-          blocks.reduce((sum, block) => sum + block.block.z, 0) / Math.max(1, blocks.length),
-        );
+        const building = buildings.find((candidate) => candidate.node === "masonry-building");
+        const blocks = visualCity.hero.blocks.filter((block) => block.role.startsWith("fulton-brick"));
+        target = building
+          ? new THREE.Vector3(building.x, Math.min(2.3, building.height * 0.23), building.z)
+          : new THREE.Vector3(
+              blocks.reduce((sum, block) => sum + block.block.x, 0) / Math.max(1, blocks.length),
+              2.1,
+              blocks.reduce((sum, block) => sum + block.block.z, 0) / Math.max(1, blocks.length),
+            );
         position = new THREE.Vector3(
-          target.x - distance * 0.42,
-          distance * 0.12,
-          target.z + distance * 0.22,
+          target.x + 11.5,
+          target.y + 3,
+          target.z + 6.4,
         );
       } else if (bookmark === "glass") {
-        const block = visualCity.hero.blocks.find(
-          (candidate) => candidate.role === "modern-glass-corner",
-        )?.block;
-        if (block) target = new THREE.Vector3(block.x, 7.2, block.z);
+        const building = buildings.find((candidate) => candidate.node === "blue-unitized-tower") ??
+          buildings.find((candidate) => candidate.node === "miesian-grid-tower");
+        if (building) target = new THREE.Vector3(building.x, building.height * 0.42, building.z);
         position = new THREE.Vector3(
-          target.x + distance * 0.44,
-          target.y + distance * 0.26,
-          target.z + distance * 0.34,
+          target.x + 14,
+          target.y + 5,
+          target.z + 8,
+        );
+      } else if (bookmark === "selection") {
+        const building = buildings.find((candidate) => candidate.node === "limestone-office") ?? buildings[0];
+        if (building) {
+          target = new THREE.Vector3(building.x, building.height * 0.32, building.z);
+          onSelectEntity(building.primaryEntityId);
+        }
+        position = new THREE.Vector3(
+          target.x + 13,
+          target.y + 4.2,
+          target.z + 7.2,
         );
       }
       camera.position.copy(position);
@@ -1441,13 +1522,13 @@ function CameraRig({
       controlsRef.current.update();
       focusingRef.current = false;
     },
-    [bounds.maxHeight, bounds.radius, camera, visualCity],
+    [assetHero, bounds.radius, camera, onSelectEntity, visualCity],
   );
 
   useLayoutEffect(() => {
     if (lastCityKey.current === cityKey) return;
     lastCityKey.current = cityKey;
-    const distance = Math.max(18, bounds.radius * (visualCity ? 1.62 : 1.32));
+    const distance = Math.max(18, bounds.radius * (visualCity ? 0.72 : 1.32));
     const target = new THREE.Vector3(
       visualCity?.hero.cameraTarget.x ?? bounds.centerX,
       visualCity?.hero.cameraTarget.y ?? Math.min(bounds.maxHeight * 0.18, distance * 0.1),
@@ -1456,8 +1537,8 @@ function CameraRig({
     if (visualCity) {
       camera.position.set(
         visualCity.hero.cameraTarget.x - distance * 0.86,
-        Math.max(bounds.maxHeight * 0.9, distance * 0.68),
-        visualCity.hero.cameraTarget.z + distance * 0.92,
+        Math.max(bounds.maxHeight * 0.52, distance * 0.44),
+        visualCity.hero.cameraTarget.z + distance * 0.76,
       );
     } else {
       camera.position.set(
@@ -1602,6 +1683,7 @@ function CameraRig({
         "2": "river",
         "3": "fulton",
         "4": "glass",
+        "5": "selection",
       } as const)[event.key];
       if (!bookmark) return;
       event.preventDefault();
