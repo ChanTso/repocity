@@ -134,7 +134,6 @@ export interface SemanticMetropolisProps {
   showWaterTraffic?: boolean;
   /** Freezes semantic traffic without rebuilding any scene objects. */
   playing?: boolean;
-  selectedEntityId?: string | null;
   onHoverEntity?: (entityId: string | null) => void;
   onSelectEntity?: (entityId: string) => void;
 }
@@ -143,8 +142,9 @@ export interface SemanticMetropolisProps {
  * Complete macro replacement for the legacy file-tower city in Flow mode.
  *
  * The component renders only compiler-provided semantic structures. Ambient
- * trees and street furniture carry no software meaning, while campuses,
- * boundaries, roads, and mobility routes remain backed by SemanticCityPlan.
+ * Trees and street furniture carry no software meaning. Semantic facts remain
+ * backed by SemanticCityPlan while V4 projects them into shared streets,
+ * blocks, parcels and buildings through UrbanFabricPlan.
  */
 export function SemanticMetropolis({
   plan,
@@ -157,7 +157,6 @@ export function SemanticMetropolis({
   showPedestrians = true,
   showWaterTraffic = true,
   playing = true,
-  selectedEntityId = null,
   onHoverEntity,
   onSelectEntity,
 }: SemanticMetropolisProps) {
@@ -344,7 +343,7 @@ export function SemanticMetropolis({
         boxes={campusGeometry.selection}
         color="#8be4cf"
         material="basic"
-        opacity={0.24}
+        opacity={0.72}
         transparent
       />
 
@@ -354,7 +353,6 @@ export function SemanticMetropolis({
           onHoverEntity={onHoverEntity}
           onSelectEntity={onSelectEntity}
           reservedEntityIds={reservedEntityIds}
-          selectedEntityId={selectedEntityId}
         />
       ) : null}
 
@@ -1184,11 +1182,11 @@ function makeUrbanFabricGeometry(
       if (!componentId) continue;
       const color =
         assignmentByComponentId.get(componentId)?.accentColor ?? "#8be4cf";
-      const edge = 0.16;
+      const edge = 0.28;
       geometry.selection.push(
         {
           x: block.x,
-          y: CAMPUS_BASE_Y + 0.025,
+          y: CAMPUS_BASE_Y + 0.075,
           z: block.z - block.depth / 2,
           width: block.width + edge,
           height: 0.07,
@@ -1197,7 +1195,7 @@ function makeUrbanFabricGeometry(
         },
         {
           x: block.x,
-          y: CAMPUS_BASE_Y + 0.025,
+          y: CAMPUS_BASE_Y + 0.075,
           z: block.z + block.depth / 2,
           width: block.width + edge,
           height: 0.07,
@@ -1206,7 +1204,7 @@ function makeUrbanFabricGeometry(
         },
         {
           x: block.x - block.width / 2,
-          y: CAMPUS_BASE_Y + 0.025,
+          y: CAMPUS_BASE_Y + 0.075,
           z: block.z,
           width: edge,
           height: 0.07,
@@ -1215,7 +1213,7 @@ function makeUrbanFabricGeometry(
         },
         {
           x: block.x + block.width / 2,
-          y: CAMPUS_BASE_Y + 0.025,
+          y: CAMPUS_BASE_Y + 0.075,
           z: block.z,
           width: edge,
           height: 0.07,
@@ -1231,63 +1229,82 @@ function makeUrbanFabricGeometry(
 function UrbanBuildingHitTargets({
   buildings,
   reservedEntityIds,
-  selectedEntityId,
   onHoverEntity,
   onSelectEntity,
 }: {
   buildings: readonly UrbanBuildingEnvelope[];
   reservedEntityIds: ReadonlySet<string>;
-  selectedEntityId: string | null;
   onHoverEntity?: (entityId: string | null) => void;
   onSelectEntity?: (entityId: string) => void;
 }) {
-  const selectedBuildingId = buildings.find((building) =>
-    building.entityIds.includes(selectedEntityId ?? ""),
-  )?.id;
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const interactiveBuildings = useMemo(
+    () =>
+      buildings.filter(
+        (building) =>
+          !building.entityIds.some((id) => reservedEntityIds.has(id)),
+      ),
+    [buildings, reservedEntityIds],
+  );
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    interactiveBuildings.forEach((building, index) => {
+      dummy.position.set(
+        building.x,
+        CAMPUS_BASE_Y + building.height / 2,
+        building.z,
+      );
+      dummy.rotation.set(0, building.rotation, 0);
+      dummy.scale.set(building.width, building.height, building.depth);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [dummy, interactiveBuildings]);
+  const entityIdAt = (instanceId: number | undefined) =>
+    instanceId === undefined
+      ? undefined
+      : interactiveBuildings[instanceId]?.primaryEntityId;
+  if (interactiveBuildings.length === 0) return null;
   return (
-    <group name="urban-building-hit-targets">
-      {buildings.map((building) => {
-        if (building.entityIds.some((id) => reservedEntityIds.has(id))) {
-          return null;
-        }
-        return (
-          <mesh
-            key={building.id}
-            position={[
-              building.x,
-              CAMPUS_BASE_Y + building.height / 2,
-              building.z,
-            ]}
-            rotation={[0, building.rotation, 0]}
-            scale={[building.width, building.height, building.depth]}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSelectEntity?.(building.primaryEntityId);
-            }}
-            onDoubleClick={(event) => {
-              event.stopPropagation();
-              onSelectEntity?.(building.primaryEntityId);
-            }}
-            onPointerOut={(event) => {
-              event.stopPropagation();
-              onHoverEntity?.(null);
-            }}
-            onPointerOver={(event) => {
-              event.stopPropagation();
-              onHoverEntity?.(building.primaryEntityId);
-            }}
-          >
-            <boxGeometry args={[1, 1, 1]} />
-            <meshBasicMaterial
-              color={selectedBuildingId === building.id ? "#fff2b7" : "#ffffff"}
-              depthWrite={false}
-              opacity={0.001}
-              transparent
-            />
-          </mesh>
-        );
-      })}
-    </group>
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, interactiveBuildings.length]}
+      name="urban-building-hit-targets"
+      onClick={(event) => {
+        const entityId = entityIdAt(event.instanceId);
+        if (!entityId) return;
+        event.stopPropagation();
+        onSelectEntity?.(entityId);
+      }}
+      onDoubleClick={(event) => {
+        const entityId = entityIdAt(event.instanceId);
+        if (!entityId) return;
+        event.stopPropagation();
+        onSelectEntity?.(entityId);
+      }}
+      onPointerOut={(event) => {
+        event.stopPropagation();
+        onHoverEntity?.(null);
+      }}
+      onPointerOver={(event) => {
+        const entityId = entityIdAt(event.instanceId);
+        if (!entityId) return;
+        event.stopPropagation();
+        onHoverEntity?.(entityId);
+      }}
+    >
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial
+        color="#ffffff"
+        depthWrite={false}
+        opacity={0.001}
+        transparent
+      />
+    </instancedMesh>
   );
 }
 

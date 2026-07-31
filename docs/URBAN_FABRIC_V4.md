@@ -237,3 +237,90 @@ comparison remain explicit.
 5. Validate steps 8/9/10, screenshots, performance proxies and all checks.
 6. Commit in coherent slices, push `agent/urban-fabric-v4`, and open one focused
    draft PR. Do not merge it in this phase.
+
+## Implementation result
+
+V4 now compiles the current 244-file HEAD fixture into:
+
+| Layer | Count |
+| --- | ---: |
+| semantic components | 6 |
+| shared streets | 18 |
+| typed-water bridges | 2 |
+| public blocks | 18 |
+| occupied parcels | 26 |
+| building envelopes | 26 |
+| entity addresses | 244 |
+
+Every component occupies exactly three mutually connected blocks. All occupied
+parcels have real frontage and a sidewalk entrance, so the measured default
+frontage rate is 100%. The resulting building mix is eight narrow street
+buildings, eight podium/towers, six perimeter/courtyard blocks, three technical
+halls and one civic landmark. The civic and technical forms are therefore
+exceptions rather than the city's default language.
+
+The public street graph is generated before assignments and contains two
+cross-bank bridge segments. Non-water fixtures receive equivalent ground
+crossings rather than disconnected halves. Static repository relations still
+do not create ambient vehicles: journey tokens are the only moving agents.
+
+The existing `SemanticMetropolis` renderer now consumes `UrbanFabricPlan` in
+Flow mode. It retains instanced facade/roof/glazing groups and uses one
+instanced hit-target mesh for all 26 selectable envelopes; it does not create a
+React node or draw call per window. Selection is an accent-colored perimeter
+around the complete three-block assignment, never a permanently colored plot.
+
+## Journey and interaction verification
+
+Direct canvas picking was exercised against a courtyard building and resolved
+to `packages/analyzer/blob-cache-23.ts`. Its existing inspector still showed
+the summary, two export symbols, three relations, metrics, history, source link
+and Diff link.
+
+Repository journey steps 8, 9 and 10 were each selected through the real UI:
+
+- step 8 resolved `Project Bundle 入城港` to
+  `apps/web/project-loader-05.ts` and retained its static Bundle / Artifact
+  water-boundary evidence;
+- step 9 resolved `Viewer 城市调度中心` to
+  `apps/web/timeline-03.ts` and retained its response token cohort;
+- step 10 resolved `三维施工现场` to
+  `packages/renderer/city-scene-01.ts` and retained its scene-build evidence.
+
+Land legs visibly followed local streets, waterfront primaries and bridges.
+Boat legs retained their evidence-authorized semantic points. The spatial
+projection changes no journey ID, token ID, evidence ID, provenance, weight or
+inspector destination; this is also covered by the V4 integration test.
+
+## Final visual record
+
+- [before overview](./screenshots/urban-fabric-v4-before-overview.png)
+- [after overview](./screenshots/urban-fabric-v4-after-overview.png)
+- [road and block close-up](./screenshots/urban-fabric-v4-road-block-closeup.png)
+- [multi-block selection](./screenshots/urban-fabric-v4-multi-block-selection.png)
+- [building/file drill-down](./screenshots/urban-fabric-v4-building-drilldown.png)
+- [journey step 8](./screenshots/urban-fabric-v4-journey-step-08.png)
+- [journey step 9](./screenshots/urban-fabric-v4-journey-step-09.png)
+- [journey step 10](./screenshots/urban-fabric-v4-journey-step-10.png)
+
+## Verification and performance report
+
+The final repository suite covers 72 application-library tests, including eight
+new V4 invariants, plus all workspace and rendered-HTML tests. Lint, typecheck,
+unit tests, production build and rendered-HTML tests pass. The existing Vinext
+route-classification and greater-than-500-kB chunk warnings remain unchanged.
+
+The same in-app browser, viewport, daylight preset and deterministic journey
+were used for before/after observation. Orbiting, following journey steps,
+switching steps and building picking remained responsive with no visible stalls.
+The render population is bounded to 18 street ribbons, 26 envelopes grouped by
+shared instanced material/part categories, and one instanced 26-item hit target.
+
+The requested numeric “median frame time no more than 15% above baseline” could
+not be established: the browser automation evaluation sandbox did not expose
+`requestAnimationFrame`, and the baseline was recorded before a page-side frame
+probe existed. This is an explicit unverified performance assumption, not a
+claim that the 15% threshold passed. The available same-browser observation,
+bounded scene counts, retained instancing, production build and unchanged chunk
+warning are the recorded proxies. A future benchmark should add a renderer-level
+probe before both comparison builds so the threshold can be measured honestly.

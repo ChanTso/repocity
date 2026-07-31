@@ -1633,7 +1633,7 @@ export function RepoCityApp() {
                   ? semanticCityPlan.components.length
                   : visibleDistrictIds.size}
               </strong>
-              <span>{mode === "journey" ? "职责园区" : "城区"}</span>
+              <span>{mode === "journey" ? "语义组件" : "城区"}</span>
             </div>
             <div>
               <strong>{metric(replayFrame.activeRelationIds.size)}</strong>

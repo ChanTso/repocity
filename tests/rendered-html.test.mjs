@@ -54,7 +54,8 @@ test("exposes the core exploration and replay controls", async () => {
   assert.match(html, /Git 历史分析厂/);
   assert.match(html, /LOCAL FACTS ONLY/);
   // Flow mode names the same HEAD count as repository facts rather than
-  // falsely claiming that every source file is a standalone building.
+  // falsely claiming that every source file is a standalone building. The
+  // semantic component count is independent of physical V4 city blocks.
   assert.match(html, /<strong>244<\/strong><span>文件事实<\/span>/);
-  assert.match(html, /<strong>6<\/strong><span>职责园区<\/span>/);
+  assert.match(html, /<strong>6<\/strong><span>语义组件<\/span>/);
 });

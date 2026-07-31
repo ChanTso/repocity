@@ -662,11 +662,9 @@ function SceneContents({
   const flowComponentIds = useMemo(() => {
     if (!semanticCityPlan || !flowJourney) return null;
     const ids = new Set<string>();
-    const activeJourneyEntityId = [...(activeFlowEntityIds ?? [])][0];
     for (const entityId of [
       selectedEntityId,
       hoveredEntityId,
-      activeJourneyEntityId,
     ]) {
       if (!entityId) continue;
       const componentId =
@@ -676,7 +674,6 @@ function SceneContents({
     }
     return ids;
   }, [
-    activeFlowEntityIds,
     flowJourney,
     hoveredEntityId,
     selectedEntityId,
@@ -886,7 +883,6 @@ function SceneContents({
           urbanFabric={urbanFabricPlan}
           onHoverEntity={onHoverEntity}
           onSelectEntity={onSelectEntity}
-          selectedEntityId={selectedEntityId}
           playing={flowPlaying}
           // Only the currently inspected cutaway owns physical space. Other
           // journey stops remain lightweight semantic beacons, so a ten-step

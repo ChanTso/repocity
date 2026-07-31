@@ -384,21 +384,20 @@ function componentColor(
 }
 
 function typologyForBlock(
-  seed: string,
-  block: UrbanBlock,
+  _seed: string,
+  _block: UrbanBlock,
   globalIndex: number,
 ): UrbanBuildingTypology {
   if (globalIndex === 0) return "civic-landmark";
   const cycle: readonly UrbanBuildingTypology[] = [
-    "narrow-street",
     "perimeter-courtyard",
     "podium-tower",
     "narrow-street",
-    "technical-hall",
     "perimeter-courtyard",
+    "technical-hall",
     "podium-tower",
   ];
-  return cycle[stableCityHash(`${seed}:${block.id}`) % cycle.length]!;
+  return cycle[(globalIndex - 1) % cycle.length]!;
 }
 
 function parcelDraftsForBlock(
@@ -683,7 +682,7 @@ export function planUrbanFabric({
   const streets = bankFabrics
     .flatMap((fabric) => fabric.streets)
     .sort((left, right) => compareText(left.id, right.id));
-  if (water && split.west.length > 0 && split.east.length > 0) {
+  if (split.west.length > 0 && split.east.length > 0) {
     const pitchZ = BLOCK_DEPTH + STREET_GAP;
     const bridgeOffsets = rowCount > 1 ? [-0.5, 0.5] : [0];
     for (const [index, offset] of bridgeOffsets.entries()) {
@@ -696,7 +695,7 @@ export function planUrbanFabric({
         point(eastInnerStreetX, z),
         `bridge:${index}`,
       );
-      bridge.surface = "bridge";
+      bridge.surface = water ? "bridge" : "ground";
       streets.push(bridge);
     }
     streets.sort((left, right) => compareText(left.id, right.id));
