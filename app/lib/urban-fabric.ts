@@ -138,13 +138,6 @@ const WATERFRONT_GAP = 2.2;
 const BUILDING_SETBACK = 0.55;
 const BLOCK_COLUMNS = 3;
 
-const EDGES: readonly UrbanBlockEdge[] = [
-  "north",
-  "east",
-  "south",
-  "west",
-];
-
 const MATERIALS: readonly UrbanMaterialKey[] = [
   "limestone",
   "warm-concrete",
@@ -690,6 +683,24 @@ export function planUrbanFabric({
   const streets = bankFabrics
     .flatMap((fabric) => fabric.streets)
     .sort((left, right) => compareText(left.id, right.id));
+  if (water && split.west.length > 0 && split.east.length > 0) {
+    const pitchZ = BLOCK_DEPTH + STREET_GAP;
+    const bridgeOffsets = rowCount > 1 ? [-0.5, 0.5] : [0];
+    for (const [index, offset] of bridgeOffsets.entries()) {
+      const z = semanticPlan.bounds.z + offset * pitchZ;
+      const bridge = makeStreet(
+        semanticPlan.seed,
+        "crossing",
+        "secondary",
+        point(westInnerStreetX, z),
+        point(eastInnerStreetX, z),
+        `bridge:${index}`,
+      );
+      bridge.surface = "bridge";
+      streets.push(bridge);
+    }
+    streets.sort((left, right) => compareText(left.id, right.id));
+  }
   const blocks = bankFabrics
     .flatMap((fabric) => fabric.blocks)
     .sort((left, right) => compareText(left.id, right.id));
@@ -749,4 +760,67 @@ export function urbanComponentForEntity(
   entityId: string | null | undefined,
 ): string | null {
   return entityId ? plan.entityAddresses[entityId]?.componentId ?? null : null;
+}
+
+/**
+ * Reproject a land journey onto the shared V4 street hierarchy. Water legs
+ * retain their evidence-authorized geometry and are returned unchanged.
+ */
+export function projectUrbanJourneyLeg(
+  plan: UrbanFabricPlan,
+  sourceEntityId: string,
+  targetEntityId: string,
+  mode: "pedestrian" | "car" | "transit" | "freight" | "boat",
+  semanticPoints: readonly CityPoint[],
+): CityPoint[] {
+  if (mode === "boat") {
+    return semanticPoints.map((candidate) => point(candidate.x, candidate.z));
+  }
+  const source = plan.entityAddresses[sourceEntityId];
+  const target = plan.entityAddresses[targetEntityId];
+  if (!source || !target) {
+    return semanticPoints.map((candidate) => point(candidate.x, candidate.z));
+  }
+  const blockById = new Map(plan.blocks.map((block) => [block.id, block]));
+  const sourceBlock = blockById.get(source.blockId);
+  const targetBlock = blockById.get(target.blockId);
+  if (!sourceBlock || !targetBlock) return [];
+  const primaryByBank = new Map(
+    plan.streets
+      .filter((street) => street.hierarchy === "primary")
+      .map((street) => [street.bank, street] as const),
+  );
+  const sourcePrimary = primaryByBank.get(sourceBlock.bank);
+  const targetPrimary = primaryByBank.get(targetBlock.bank);
+  if (!sourcePrimary || !targetPrimary) return [];
+  const sourcePrimaryX = sourcePrimary.x;
+  const targetPrimaryX = targetPrimary.x;
+  if (sourceBlock.bank === targetBlock.bank) {
+    return [
+      point(source.entrance.x, source.entrance.z),
+      point(sourcePrimaryX, source.entrance.z),
+      point(targetPrimaryX, target.entrance.z),
+      point(target.entrance.x, target.entrance.z),
+    ];
+  }
+  const bridges = plan.streets.filter(
+    (street) => street.bank === "crossing" && street.surface === "bridge",
+  );
+  const desiredZ = (source.entrance.z + target.entrance.z) / 2;
+  const bridge = [...bridges].sort(
+    (left, right) =>
+      Math.abs(left.z - desiredZ) - Math.abs(right.z - desiredZ) ||
+      compareText(left.id, right.id),
+  )[0];
+  if (!bridge) {
+    return semanticPoints.map((candidate) => point(candidate.x, candidate.z));
+  }
+  return [
+    point(source.entrance.x, source.entrance.z),
+    point(sourcePrimaryX, source.entrance.z),
+    point(sourcePrimaryX, bridge.z),
+    point(targetPrimaryX, bridge.z),
+    point(targetPrimaryX, target.entrance.z),
+    point(target.entrance.x, target.entrance.z),
+  ];
 }

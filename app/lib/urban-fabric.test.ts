@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { demoProject } from "./demo-data";
+import { planFlowSimulation } from "./flow-simulation";
 import { planLivingCity } from "./living-city";
+import { projectSemanticFlow } from "./semantic-flow";
 import { planSemanticCity } from "./semantic-city";
 import {
   planUrbanFabric,
+  projectUrbanJourneyLeg,
   selectedUrbanBlocks,
   type UrbanBlock,
 } from "./urban-fabric";
@@ -115,6 +118,9 @@ describe("road-first urban fabric planning", () => {
       fabric.streets.some((street) => street.hierarchy === "local"),
     ).toBe(true);
     expect(
+      fabric.streets.filter((street) => street.surface === "bridge"),
+    ).toHaveLength(2);
+    expect(
       fabric.blocks.every((block) =>
         Object.values(block.streetIdsByEdge).every((id) => streetIds.has(id)),
       ),
@@ -213,5 +219,78 @@ describe("road-first urban fabric planning", () => {
         (building) => !accentColors.has(building.material),
       ),
     ).toBe(true);
+  });
+
+  it("preserves repository journey steps 8, 9 and 10 while routing land legs on streets", () => {
+    const living = planLivingCity({
+      entities: demoProject.entities,
+      districts: demoProject.districts,
+      relations: demoProject.relations,
+    });
+    const semantic = planSemanticCity({
+      cityPlan: living,
+      entities: demoProject.entities,
+      relations: demoProject.relations,
+      boundaryFacts: demoProject.boundaryFacts,
+    });
+    const fabric = planUrbanFabric({ semanticPlan: semantic });
+    const simulation = planFlowSimulation({
+      entities: demoProject.entities,
+      relations: demoProject.relations,
+      cityPlan: living,
+      artifactWaterBoundaries: semantic.terrain.waterBoundaries,
+      artifactBoundaryFacts: demoProject.boundaryFacts,
+      maxJourneys: 4,
+      maxLegsPerJourney: 12,
+    });
+    const journey = simulation.journeys.find(
+      (candidate) => candidate.id === simulation.defaultJourneyId,
+    )!;
+    const semanticProjection = projectSemanticFlow({
+      plan: semantic,
+      journey,
+    });
+    const finalSteps = journey.steps.slice(7, 10);
+
+    expect(finalSteps).toHaveLength(3);
+    expect(finalSteps.map((step) => step.label)).toEqual([
+      "Project Bundle 入城港",
+      "Viewer 城市调度中心",
+      "三维施工现场",
+    ]);
+    expect(
+      finalSteps.every((step) => Boolean(fabric.entityAddresses[step.entityId])),
+    ).toBe(true);
+
+    for (const leg of journey.legs) {
+      const semanticPoints = semanticProjection.legPoints[leg.id] ?? [];
+      const projected = projectUrbanJourneyLeg(
+        fabric,
+        leg.sourceEntityId,
+        leg.targetEntityId,
+        leg.mode,
+        semanticPoints,
+      );
+      if (leg.mode === "boat") {
+        expect(projected).toEqual(semanticPoints);
+        continue;
+      }
+      expect(projected.length).toBeGreaterThanOrEqual(4);
+      expect(projected[0]).toEqual(
+        fabric.entityAddresses[leg.sourceEntityId]!.entrance,
+      );
+      expect(projected.at(-1)).toEqual(
+        fabric.entityAddresses[leg.targetEntityId]!.entrance,
+      );
+    }
+
+    expect(journey.tokens.map((token) => token.id)).toEqual(
+      simulation.journeys
+        .find((candidate) => candidate.id === simulation.defaultJourneyId)!
+        .tokens.map((token) => token.id),
+    );
+    expect(finalSteps.map((step) => step.evidenceIds)).toEqual(
+      journey.steps.slice(7, 10).map((step) => step.evidenceIds),
+    );
   });
 });

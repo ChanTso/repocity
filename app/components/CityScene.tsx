@@ -48,6 +48,10 @@ import {
 import type { SemanticFlowProjection } from "@/app/lib/semantic-flow";
 import type { SemanticCityPlan } from "@/app/lib/semantic-city";
 import {
+  projectUrbanJourneyLeg,
+  type UrbanFabricPlan,
+} from "@/app/lib/urban-fabric";
+import {
   getFacilityLabel,
   LivingCityBuildings,
 } from "./city/LivingCityBuildings";
@@ -83,6 +87,8 @@ export interface CitySceneProps {
   cityPlan?: LivingCityPlan;
   /** Component-first L0 projection used by the Flow experience. */
   semanticCityPlan?: SemanticCityPlan;
+  /** Road-first spatial projection used by the Flow experience. */
+  urbanFabricPlan?: UrbanFabricPlan;
   /** Explicit journey agents projected onto semantic infrastructure. */
   semanticFlowProjection?: SemanticFlowProjection | null;
   commitIndex?: number | null;
@@ -135,6 +141,7 @@ export function CityScene({
   districts = [],
   cityPlan,
   semanticCityPlan,
+  urbanFabricPlan,
   semanticFlowProjection,
   commitIndex,
   entityFrameStates,
@@ -199,9 +206,9 @@ export function CityScene({
   const bounds = useMemo(
     () =>
       flowJourney && semanticCityPlan
-        ? getSemanticMetropolisBounds(semanticCityPlan)
+        ? getSemanticMetropolisBounds(semanticCityPlan, urbanFabricPlan)
         : getLivingCityBounds(plan),
-    [flowJourney, plan, semanticCityPlan],
+    [flowJourney, plan, semanticCityPlan, urbanFabricPlan],
   );
   const hiddenDistrictSet = useMemo(
     () => new Set<string>(hiddenDistrictIds),
@@ -382,6 +389,7 @@ export function CityScene({
           onSelectEntity={(entityId) => selectEntity(entityId)}
           plan={plan}
           semanticCityPlan={semanticCityPlan}
+          urbanFabricPlan={urbanFabricPlan}
           semanticFlowProjection={semanticFlowProjection}
           pulseSignature={pulseSignature}
           relations={relations}
@@ -403,6 +411,7 @@ export default CityScene;
 interface SceneContentsProps {
   plan: LivingCityPlan;
   semanticCityPlan?: SemanticCityPlan;
+  urbanFabricPlan?: UrbanFabricPlan;
   semanticFlowProjection?: SemanticFlowProjection | null;
   bounds: LivingCityRenderBounds;
   entities: readonly CitySceneEntity[];
@@ -442,7 +451,27 @@ interface JourneyCameraFocus {
 
 function getSemanticMetropolisBounds(
   plan: SemanticCityPlan,
+  urbanFabric?: UrbanFabricPlan,
 ): LivingCityRenderBounds {
+  if (urbanFabric && urbanFabric.blocks.length > 0) {
+    const { bounds } = urbanFabric;
+    const maxHeight = Math.max(
+      8,
+      ...urbanFabric.buildings.map((building) => building.height),
+    );
+    return {
+      minX: bounds.minX,
+      maxX: bounds.maxX,
+      minZ: bounds.minZ,
+      maxZ: bounds.maxZ,
+      centerX: bounds.x,
+      centerZ: bounds.z,
+      width: bounds.width,
+      depth: bounds.depth,
+      maxHeight,
+      radius: Math.max(16, Math.hypot(bounds.width, bounds.depth) / 2),
+    };
+  }
   if (plan.campuses.length === 0) {
     const radius = Math.max(
       12,
@@ -503,6 +532,7 @@ function getSemanticMetropolisBounds(
 function SceneContents({
   plan,
   semanticCityPlan,
+  urbanFabricPlan,
   semanticFlowProjection,
   bounds,
   entities,
@@ -547,6 +577,10 @@ function SceneContents({
   );
   const journeyPlan = useMemo<LivingCityPlan>(() => {
     if (!flowJourney || !semanticCityPlan) return plan;
+    const urbanBuildingById = new Map(
+      urbanFabricPlan?.buildings.map((building) => [building.id, building]) ??
+        [],
+    );
     const slotByEntityId = new Map(
       semanticCityPlan.campuses.flatMap((campus) =>
         campus.fileSlots.map(
@@ -560,36 +594,53 @@ function SceneContents({
       // not fall back to the legacy decorative river heuristic.
       geography: { river: null },
       buildings: plan.buildings.map((building) => {
+        const urbanAddress =
+          urbanFabricPlan?.entityAddresses[building.entityId];
         const address =
-          semanticCityPlan.entityAddresses[building.entityId];
+          urbanAddress ?? semanticCityPlan.entityAddresses[building.entityId];
         const slot = slotByEntityId.get(building.entityId);
-        if (!address || !slot) return building;
+        const urbanBuilding = urbanAddress
+          ? urbanBuildingById.get(urbanAddress.buildingId)
+          : undefined;
+        if (!address || (!slot && !urbanBuilding)) return building;
         return {
           ...building,
           x: address.worldPoint.x,
           z: address.worldPoint.z,
-          width: Math.max(1.2, Math.min(3.2, slot.width * 2.6)),
-          depth: Math.max(1.2, Math.min(3.2, slot.depth * 2.6)),
+          width: urbanBuilding
+            ? Math.max(1.4, Math.min(3.4, urbanBuilding.width * 0.42))
+            : Math.max(1.2, Math.min(3.2, slot!.width * 2.6)),
+          depth: urbanBuilding
+            ? Math.max(1.4, Math.min(3.4, urbanBuilding.depth * 0.42))
+            : Math.max(1.2, Math.min(3.2, slot!.depth * 2.6)),
           frontage: {
             ...building.frontage,
-            point: { ...address.worldPoint },
+            point: {
+              ...(urbanAddress?.entrance ?? address.worldPoint),
+            },
           },
         };
       }),
     };
-  }, [flowJourney, plan, semanticCityPlan]);
+  }, [flowJourney, plan, semanticCityPlan, urbanFabricPlan]);
   const projectedFlowJourney = useMemo<FlowJourneyView | null>(() => {
     if (!flowJourney || !semanticFlowProjection) return flowJourney;
     return {
       ...flowJourney,
       legs: flowJourney.legs.map((leg) => ({
         ...leg,
-        points: [
-          ...(semanticFlowProjection.legPoints[leg.id] ?? []),
-        ],
+        points: urbanFabricPlan
+          ? projectUrbanJourneyLeg(
+              urbanFabricPlan,
+              leg.sourceEntityId,
+              leg.targetEntityId,
+              leg.mode,
+              semanticFlowProjection.legPoints[leg.id] ?? [],
+            )
+          : [...(semanticFlowProjection.legPoints[leg.id] ?? [])],
       })),
     };
-  }, [flowJourney, semanticFlowProjection]);
+  }, [flowJourney, semanticFlowProjection, urbanFabricPlan]);
   const buildingByEntityId = useMemo(
     () =>
       new Map(
@@ -600,13 +651,6 @@ function SceneContents({
       ),
     [journeyPlan],
   );
-  const flowEntityIds = useMemo(
-    () =>
-      flowJourney
-        ? new Set(flowJourney.steps.map((step) => step.entityId))
-        : null,
-    [flowJourney],
-  );
   const activeFlowEntityIds = useMemo(() => {
     if (!flowJourney || flowJourney.steps.length === 0) return null;
     const safeIndex = Math.max(
@@ -616,15 +660,29 @@ function SceneContents({
     return new Set([flowJourney.steps[safeIndex]!.entityId]);
   }, [flowJourney, flowStepIndex]);
   const flowComponentIds = useMemo(() => {
-    if (!semanticCityPlan || !flowEntityIds) return null;
+    if (!semanticCityPlan || !flowJourney) return null;
     const ids = new Set<string>();
-    for (const entityId of flowEntityIds) {
+    const activeJourneyEntityId = [...(activeFlowEntityIds ?? [])][0];
+    for (const entityId of [
+      selectedEntityId,
+      hoveredEntityId,
+      activeJourneyEntityId,
+    ]) {
+      if (!entityId) continue;
       const componentId =
+        urbanFabricPlan?.entityAddresses[entityId]?.componentId ??
         semanticCityPlan.entityAddresses[entityId]?.componentId;
       if (componentId) ids.add(componentId);
     }
     return ids;
-  }, [flowEntityIds, semanticCityPlan]);
+  }, [
+    activeFlowEntityIds,
+    flowJourney,
+    hoveredEntityId,
+    selectedEntityId,
+    semanticCityPlan,
+    urbanFabricPlan,
+  ]);
   const journeyCameraFocus = useMemo<JourneyCameraFocus | null>(() => {
     if (
       !projectedFlowJourney ||
@@ -825,6 +883,10 @@ function SceneContents({
           // token cohort from becoming an unexplained ambient population.
           mobilityRoutes={NO_SEMANTIC_MOBILITY}
           plan={semanticCityPlan}
+          urbanFabric={urbanFabricPlan}
+          onHoverEntity={onHoverEntity}
+          onSelectEntity={onSelectEntity}
+          selectedEntityId={selectedEntityId}
           playing={flowPlaying}
           // Only the currently inspected cutaway owns physical space. Other
           // journey stops remain lightweight semantic beacons, so a ten-step

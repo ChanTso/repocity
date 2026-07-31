@@ -67,6 +67,7 @@ import { planLivingCity } from "../lib/living-city";
 import { planSemanticCity } from "../lib/semantic-city";
 import { projectSemanticFlow } from "../lib/semantic-flow";
 import { planFlowSimulation } from "../lib/flow-simulation";
+import { planUrbanFabric } from "../lib/urban-fabric";
 import { resolveViewerReplayFrame } from "../lib/viewer-replay";
 
 type Mode = "explore" | "journey" | "replay";
@@ -673,6 +674,10 @@ export function RepoCityApp() {
         boundaryFacts,
       }),
     [boundaryFacts, flowEntities, flowRelations, livingCityPlan],
+  );
+  const urbanFabricPlan = useMemo(
+    () => planUrbanFabric({ semanticPlan: semanticCityPlan }),
+    [semanticCityPlan],
   );
   const cityCapabilities = useMemo(() => {
     return {
@@ -1524,6 +1529,7 @@ export function RepoCityApp() {
           <CityScene
             cityPlan={livingCityPlan}
             semanticCityPlan={semanticCityPlan}
+            urbanFabricPlan={urbanFabricPlan}
             semanticFlowProjection={semanticFlowProjection}
             entities={entities}
             relations={relations}
