@@ -55,7 +55,11 @@ import {
   type UrbanFabricPlan,
 } from "@/app/lib/urban-fabric";
 import type { VisualCityPlan } from "@/app/lib/visual-city";
-import { planAssetBackedHero } from "@/app/lib/asset-city";
+import {
+  makeAssetReviewCameraPresets,
+  planAssetBackedHero,
+  type AssetReviewCameraId,
+} from "@/app/lib/asset-city";
 import {
   getFacilityLabel,
   LivingCityBuildings,
@@ -379,7 +383,7 @@ export function CityScene({
         onCreated={({ gl }) => {
           gl.outputColorSpace = THREE.SRGBColorSpace;
           gl.toneMapping = THREE.ACESFilmicToneMapping;
-          gl.toneMappingExposure = 1.08;
+          gl.toneMappingExposure = visualCityPlan ? 1.02 : 1.08;
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
         }}
         onPointerMissed={() => {
@@ -844,8 +848,8 @@ function SceneContents({
 
   return (
     <>
-      <color attach="background" args={[palette.background]} />
-      <fog attach="fog" args={[palette.fog, fogNear, fogFar]} />
+      <color attach="background" args={[visualCityPlan ? "#b9c5c8" : palette.background]} />
+      <fog attach="fog" args={[visualCityPlan ? "#aebabc" : palette.fog, fogNear, fogFar]} />
       {palette.daylight > 0.14 ? (
         <Sky
           distance={Math.max(450, bounds.radius * 8)}
@@ -869,22 +873,22 @@ function SceneContents({
       {visualCityPlan ? (
         <Environment resolution={128}>
           <Lightformer
-            color="#d9e7e4"
-            intensity={1.4}
+            color="#e7ece8"
+            intensity={1.25}
             position={[-18, 24, 12]}
             rotation-x={-Math.PI / 2.6}
             scale={[24, 18, 1]}
           />
           <Lightformer
-            color="#f2c998"
-            intensity={0.8}
+            color="#edcaa5"
+            intensity={0.72}
             position={[22, 10, -16]}
             rotation-y={Math.PI / 2.8}
             scale={[14, 8, 1]}
           />
           <Lightformer
-            color="#6e95a2"
-            intensity={0.55}
+            color="#879fa8"
+            intensity={0.4}
             position={[0, 6, 24]}
             scale={[18, 5, 1]}
           />
@@ -892,19 +896,19 @@ function SceneContents({
       ) : null}
       <hemisphereLight
         args={[
-          palette.ambient,
-          "#07100f",
+          visualCityPlan ? "#d9e1df" : palette.ambient,
+          visualCityPlan ? "#69645c" : "#07100f",
           0.42 + palette.daylight * 1.05,
         ]}
         position={[0, bounds.maxHeight + 12, 0]}
       />
       <ambientLight
-        color={palette.ambient}
+        color={visualCityPlan ? "#c9cfca" : palette.ambient}
         intensity={0.12 + palette.daylight * 0.32}
       />
       <directionalLight
         castShadow
-        color={palette.sun}
+        color={visualCityPlan ? "#fff0d8" : palette.sun}
         intensity={0.18 + palette.daylight * 2.35}
         position={sunPosition}
         shadow-bias={-0.00028}
@@ -1065,7 +1069,6 @@ function SceneContents({
         isRenderable={isRenderable}
         journeyFocus={journeyCameraFocus}
         journeyActive={flowJourney !== null}
-        onSelectEntity={onSelectEntity}
         targetHeight={targetHeight}
         urbanFabric={urbanFabricPlan}
         visualCity={visualCityPlan}
@@ -1419,7 +1422,6 @@ function CameraRig({
   isRenderable,
   journeyFocus,
   journeyActive,
-  onSelectEntity,
   targetHeight,
   urbanFabric,
   visualCity,
@@ -1433,7 +1435,6 @@ function CameraRig({
   isRenderable: (entityId: string) => boolean;
   journeyFocus: JourneyCameraFocus | null;
   journeyActive: boolean;
-  onSelectEntity: (entityId: string) => void;
   targetHeight: (entityId: string) => number;
   urbanFabric?: UrbanFabricPlan;
   visualCity?: VisualCityPlan;
@@ -1450,79 +1451,21 @@ function CameraRig({
     () => urbanFabric && visualCity ? planAssetBackedHero(urbanFabric, visualCity) : null,
     [urbanFabric, visualCity],
   );
+  const reviewPresets = useMemo(
+    () => assetHero && visualCity ? makeAssetReviewCameraPresets(assetHero, visualCity) : [],
+    [assetHero, visualCity],
+  );
   const applyVisualBookmark = useCallback(
-    (bookmark: "overview" | "river" | "fulton" | "glass" | "selection") => {
-      if (!visualCity || !controlsRef.current) return;
-      const buildings = assetHero?.buildings ?? [];
-      const average = buildings.length > 0
-        ? buildings.reduce(
-            (sum, building) => sum.add(new THREE.Vector3(building.x, 0, building.z)),
-            new THREE.Vector3(),
-          ).multiplyScalar(1 / buildings.length)
-        : new THREE.Vector3(
-            visualCity.hero.cameraTarget.x,
-            0,
-            visualCity.hero.cameraTarget.z,
-          );
-      let target = new THREE.Vector3(average.x, 3.1, average.z);
-      let position = new THREE.Vector3(
-        target.x - Math.max(14, bounds.radius * 0.48),
-        target.y + Math.max(7, bounds.radius * 0.22),
-        target.z + Math.max(13, bounds.radius * 0.43),
-      );
-      if (bookmark === "river") {
-        target = new THREE.Vector3(
-          (visualCity.river.minX + visualCity.river.maxX) / 2,
-          1.8,
-          visualCity.hero.bounds.z,
-        );
-        position = new THREE.Vector3(
-          target.x,
-          target.y + 8.2,
-          target.z + 26,
-        );
-      } else if (bookmark === "fulton") {
-        const building = buildings.find((candidate) => candidate.node === "masonry-building");
-        const blocks = visualCity.hero.blocks.filter((block) => block.role.startsWith("fulton-brick"));
-        target = building
-          ? new THREE.Vector3(building.x, Math.min(2.3, building.height * 0.23), building.z)
-          : new THREE.Vector3(
-              blocks.reduce((sum, block) => sum + block.block.x, 0) / Math.max(1, blocks.length),
-              2.1,
-              blocks.reduce((sum, block) => sum + block.block.z, 0) / Math.max(1, blocks.length),
-            );
-        position = new THREE.Vector3(
-          target.x + 11.5,
-          target.y + 3,
-          target.z + 6.4,
-        );
-      } else if (bookmark === "glass") {
-        const building = buildings.find((candidate) => candidate.node === "blue-unitized-tower") ??
-          buildings.find((candidate) => candidate.node === "miesian-grid-tower");
-        if (building) target = new THREE.Vector3(building.x, building.height * 0.42, building.z);
-        position = new THREE.Vector3(
-          target.x + 14,
-          target.y + 5,
-          target.z + 8,
-        );
-      } else if (bookmark === "selection") {
-        const building = buildings.find((candidate) => candidate.node === "limestone-office") ?? buildings[0];
-        if (building) {
-          target = new THREE.Vector3(building.x, building.height * 0.32, building.z);
-          onSelectEntity(building.primaryEntityId);
-        }
-        position = new THREE.Vector3(
-          target.x + 13,
-          target.y + 4.2,
-          target.z + 7.2,
-        );
-      }
-      camera.position.copy(position);
-      controlsRef.current.target.copy(target);
+    (bookmark: AssetReviewCameraId) => {
+      if (!visualCity || !controlsRef.current || !(camera instanceof THREE.PerspectiveCamera)) return;
+      const preset = reviewPresets.find((candidate) => candidate.id === bookmark);
+      if (!preset) return;
+      camera.position.fromArray(preset.position);
+      controlsRef.current.target.fromArray(preset.target);
       controlsRef.current.update();
       focusingRef.current = false;
     },
-    [assetHero, bounds.radius, camera, onSelectEntity, visualCity],
+    [camera, reviewPresets, visualCity],
   );
 
   useLayoutEffect(() => {
@@ -1534,12 +1477,10 @@ function CameraRig({
       visualCity?.hero.cameraTarget.y ?? Math.min(bounds.maxHeight * 0.18, distance * 0.1),
       visualCity?.hero.cameraTarget.z ?? bounds.centerZ,
     );
-    if (visualCity) {
-      camera.position.set(
-        visualCity.hero.cameraTarget.x - distance * 0.86,
-        Math.max(bounds.maxHeight * 0.52, distance * 0.44),
-        visualCity.hero.cameraTarget.z + distance * 0.76,
-      );
+    if (visualCity && reviewPresets.length > 0) {
+      const preset = reviewPresets.find((candidate) => candidate.id === "urban-composition") ?? reviewPresets[0]!;
+      camera.position.fromArray(preset.position);
+      target.fromArray(preset.target);
     } else {
       camera.position.set(
         bounds.centerX + distance * 0.78,
@@ -1554,7 +1495,7 @@ function CameraRig({
       controlsRef.current.update();
     }
     focusingRef.current = false;
-  }, [bounds, camera, cityKey, visualCity]);
+  }, [bounds, camera, cityKey, reviewPresets, visualCity]);
 
   const beginFocus = useCallback(
     (
@@ -1679,11 +1620,11 @@ function CameraRig({
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.target instanceof Element && event.target.closest("input, textarea, select, [contenteditable='true']")) return;
       const bookmark = ({
-        "1": "overview",
-        "2": "river",
-        "3": "fulton",
-        "4": "glass",
-        "5": "selection",
+        "1": "street-corner",
+        "2": "storefront-street",
+        "3": "river-bridge",
+        "4": "glass-facade",
+        "5": "urban-composition",
       } as const)[event.key];
       if (!bookmark) return;
       event.preventDefault();

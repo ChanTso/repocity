@@ -3,11 +3,14 @@
 import { Edges, Html, useGLTF, useTexture } from "@react-three/drei";
 import { Component, Suspense, useMemo, type ErrorInfo, type ReactNode } from "react";
 import * as THREE from "three";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   CITY_KIT_ROOT,
   type AssetBackedHeroPlan,
   type AssetHeroBuildingPlacement,
   type RiverEdgeAssetPlacement,
+  type StreetDetailPlacement,
+  type StreetProgramPlacement,
   type VisualContextAssetPlacement,
 } from "@/app/lib/asset-city";
 
@@ -33,7 +36,7 @@ class AssetBackedHeroBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("RepoCity V4.2 city-kit load failed", error, info.componentStack);
+    console.error("RepoCity V4.3 city-kit load failed", error, info.componentStack);
   }
 
   render() {
@@ -195,20 +198,118 @@ function cloneAssetNode(
       }
       if (next.name.includes("glass") && next instanceof THREE.MeshStandardMaterial) {
         next.transparent = true;
-        next.opacity = 0.72;
-        next.roughness = 0.16;
+        next.opacity = next.name.includes("clear-podium") ? 0.58 : next.name.includes("blue-green") ? 0.76 : 0.82;
+        next.roughness = next.name.includes("clear-podium") ? 0.1 : next.name.includes("blue-green") ? 0.24 : 0.2;
         next.metalness = 0.06;
-        next.envMapIntensity = 1.4;
+        next.envMapIntensity = next.name.includes("clear-podium") ? 1.15 : 1.65;
+        next.depthWrite = next.name.includes("clear-podium") ? false : true;
+        next.side = THREE.FrontSide;
       }
       if (next.name.includes("interior") && next instanceof THREE.MeshStandardMaterial) {
         next.emissive.set("#b86f31");
-        next.emissiveIntensity = 0.18;
+        next.emissiveIntensity = next.name.includes("shadow") ? 0.04 : 0.48;
+      }
+      if (next.name.includes("shop-canopy") && next instanceof THREE.MeshStandardMaterial) {
+        next.color.set("#a94736");
+        next.emissive.set("#4d160f");
+        next.emissiveIntensity = 0.12;
+      }
+      if (next.name.includes("dark-structural-steel") && next instanceof THREE.MeshStandardMaterial) {
+        next.color.set("#35454b");
       }
       return next;
     });
     object.material = Array.isArray(object.material) ? materials : materials[0]!;
   });
   return clone;
+}
+
+function ProgramAssetBatch({
+  placements,
+  scene,
+  textures,
+  onSelectEntity,
+}: {
+  placements: readonly StreetProgramPlacement[];
+  scene: THREE.Group;
+  textures: TextureSet;
+  onSelectEntity?: (entityId: string) => void;
+}) {
+  const object = useMemo(
+    () => {
+      const byMaterial = new Map<string, { material: THREE.Material; geometries: THREE.BufferGeometry[] }>();
+      for (const placement of placements) {
+        const clone = cloneAssetNode(scene, placement.node, textures);
+        clone.position.set(placement.x, placement.y, placement.z);
+        clone.rotation.y = placement.rotation;
+        clone.scale.fromArray(placement.scale);
+        clone.updateMatrixWorld(true);
+        clone.traverse((child) => {
+          if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
+          const geometry = child.geometry.clone();
+          geometry.applyMatrix4(child.matrixWorld);
+          const entry = byMaterial.get(child.material.name) ?? {
+            material: child.material as THREE.Material,
+            geometries: [] as THREE.BufferGeometry[],
+          };
+          entry.geometries.push(geometry);
+          byMaterial.set(child.material.name, entry);
+        });
+      }
+      const group = new THREE.Group();
+      group.name = `program-batch-${placements[0]?.ownerEntityId ?? "empty"}`;
+      for (const { material, geometries } of byMaterial.values()) {
+        const geometry = mergeGeometries(geometries, false);
+        if (!geometry) throw new Error("Unable to batch V4.3 program geometry");
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+      }
+      return group;
+    },
+    [placements, scene, textures],
+  );
+  const ownerEntityId = placements[0]!.ownerEntityId;
+  return (
+    <primitive
+      object={object}
+      onClick={(event: THREE.Event & { stopPropagation: () => void }) => {
+        event.stopPropagation();
+        onSelectEntity?.(ownerEntityId);
+      }}
+      userData={{
+        semantic: false,
+        layer: placements[0]!.layer,
+        routedToOwnerEntityId: ownerEntityId,
+      }}
+    />
+  );
+}
+
+function StreetDetailAsset({
+  placement,
+  scene,
+  textures,
+}: {
+  placement: StreetDetailPlacement;
+  scene: THREE.Group;
+  textures: TextureSet;
+}) {
+  const object = useMemo(
+    () => cloneAssetNode(scene, placement.node, textures),
+    [placement.node, scene, textures],
+  );
+  return (
+    <primitive
+      object={object}
+      position={[placement.x, placement.y, placement.z]}
+      rotation={[0, placement.rotation, 0]}
+      scale={placement.scale}
+      raycast={() => null}
+      userData={{ semantic: false, layer: placement.layer }}
+    />
+  );
 }
 
 function BuildingAsset({
@@ -326,9 +427,18 @@ function AssetBackedHeroContent({
 }: AssetBackedHeroProps) {
   const textures = useCityMaterialMaps();
   const streetKit = useGLTF(`${CITY_KIT_ROOT}/street-river-modules.glb`);
-  useGLTF(`${CITY_KIT_ROOT}/storefront-modules.glb`);
+  const storefrontKit = useGLTF(`${CITY_KIT_ROOT}/storefront-modules.glb`);
+  const programBatches = useMemo(() => {
+    const batches = new Map<string, StreetProgramPlacement[]>();
+    for (const placement of plan.streetPrograms) {
+      const batch = batches.get(placement.ownerEntityId) ?? [];
+      batch.push(placement);
+      batches.set(placement.ownerEntityId, batch);
+    }
+    return [...batches.values()];
+  }, [plan.streetPrograms]);
   return (
-    <group name="asset-backed-hero-v4-2">
+    <group name="asset-backed-hero-v4-3">
       {plan.buildings.map((placement) => (
         <BuildingAsset
           key={placement.id}
@@ -341,6 +451,23 @@ function AssetBackedHeroContent({
       ))}
       {plan.visualContext.map((placement) => (
         <StreetAsset
+          key={placement.id}
+          placement={placement}
+          scene={streetKit.scene}
+          textures={textures}
+        />
+      ))}
+      {programBatches.map((placements) => (
+        <ProgramAssetBatch
+          key={placements[0]!.ownerEntityId}
+          onSelectEntity={onSelectEntity}
+          placements={placements}
+          scene={storefrontKit.scene}
+          textures={textures}
+        />
+      ))}
+      {plan.streetDetails.map((placement) => (
+        <StreetDetailAsset
           key={placement.id}
           placement={placement}
           scene={streetKit.scene}

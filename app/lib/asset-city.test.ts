@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
 
 import { demoProject } from "./demo-data";
-import { planAssetBackedHero } from "./asset-city";
+import {
+  ASSET_CITY_VERSION,
+  HERO_FACADE_LANGUAGES,
+  HERO_GLASS_SYSTEMS,
+  NON_SEMANTIC_URBAN_CONTEXT,
+  makeAssetReviewCameraPresets,
+  planAssetBackedHero,
+} from "./asset-city";
 import { planLivingCity } from "./living-city";
 import { planSemanticCity } from "./semantic-city";
 import { planUrbanFabric } from "./urban-fabric";
@@ -27,7 +36,7 @@ function fixture(reverse = false) {
   };
 }
 
-describe("V4.2 asset-backed Chicago proof", () => {
+describe("V4.3 asset-backed Chicago proof", () => {
   it("is deterministic and selects five genuinely distinct principal assets", () => {
     const first = fixture();
     const reordered = fixture(true);
@@ -43,6 +52,7 @@ describe("V4.2 asset-backed Chicago proof", () => {
       ]),
     );
     expect(first.assetHero.visibleStorefrontBayCount).toBe(12);
+    expect(first.assetHero.version).toBe(ASSET_CITY_VERSION);
   });
 
   it("maps every visible building to existing semantic evidence", () => {
@@ -78,10 +88,94 @@ describe("V4.2 asset-backed Chicago proof", () => {
     expect(assetHero.riverEdge).toHaveLength(4);
     expect(assetHero.riverEdge.filter((item) => item.node === "river-edge")).toHaveLength(2);
     expect(assetHero.riverEdge.filter((item) => item.node === "bridge-abutment")).toHaveLength(2);
-    for (const item of [...assetHero.visualContext, ...assetHero.riverEdge]) {
+    for (const item of [...assetHero.visualContext, ...assetHero.streetDetails, ...assetHero.riverEdge]) {
       expect(item.semantic).toBe(false);
       expect("entityId" in item).toBe(false);
       expect("componentId" in item).toBe(false);
     }
+  });
+
+  it("keeps visual urban programs non-semantic while routing deliberate clicks to existing owners", () => {
+    const { assetHero } = fixture();
+    expect(new Set(assetHero.streetPrograms.map((program) => program.node))).toEqual(new Set([
+      "cafe-storefront",
+      "restaurant-storefront",
+      "bookstore-storefront",
+      "market-storefront",
+      "gallery-storefront",
+      "office-lobby",
+      "residential-entry",
+      "service-loading",
+    ]));
+    const entityIds = new Set(demoProject.entities.map((entity) => entity.id));
+    for (const program of assetHero.streetPrograms) {
+      expect(program.semantic).toBe(false);
+      expect(program.layer).toBe(NON_SEMANTIC_URBAN_CONTEXT);
+      expect(program.routedToOwner).toBe(true);
+      expect(entityIds.has(program.ownerEntityId)).toBe(true);
+    }
+  });
+
+  it("declares four grayscale-readable facade languages and three distinct glass systems", () => {
+    expect(HERO_FACADE_LANGUAGES).toHaveLength(4);
+    expect(new Set(HERO_FACADE_LANGUAGES).size).toBe(4);
+    expect(Object.keys(HERO_GLASS_SYSTEMS)).toHaveLength(3);
+    expect(new Set(Object.values(HERO_GLASS_SYSTEMS).map((system) => system.glass)).size).toBe(3);
+    expect(new Set(Object.values(HERO_GLASS_SYSTEMS).map((system) => system.roughness)).size).toBe(3);
+  });
+
+  it("locks five deterministic perspective review transforms", () => {
+    const first = fixture();
+    const reordered = fixture(true);
+    const cameras = makeAssetReviewCameraPresets(first.assetHero, first.visualCity);
+    expect(cameras).toEqual(makeAssetReviewCameraPresets(reordered.assetHero, reordered.visualCity));
+    expect(cameras.map((camera) => camera.id)).toEqual([
+      "street-corner",
+      "storefront-street",
+      "river-bridge",
+      "glass-facade",
+      "urban-composition",
+    ]);
+    for (const camera of cameras) {
+      expect(camera.fov).toBeGreaterThanOrEqual(30);
+      expect(camera.fov).toBeLessThanOrEqual(55);
+      expect(camera.position).toHaveLength(3);
+      expect(camera.target).toHaveLength(3);
+    }
+  });
+
+  it("keeps every generated asset present and hash-current in the provenance manifest", async () => {
+    const assetRoot = new URL("../../public/assets/city-kit-v1/", import.meta.url);
+    const manifest = await readFile(new URL("../../docs/assets/city-kit-v1-manifest.md", import.meta.url), "utf8");
+    const files = [
+      ...(await readdir(assetRoot)).filter((name) => name.endsWith(".glb")),
+      ...(await readdir(new URL("textures/", assetRoot))).map((name) => `textures/${name}`),
+    ].sort();
+    expect(files).toHaveLength(37);
+    for (const file of files) {
+      const bytes = await readFile(new URL(file, assetRoot));
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      expect(manifest).toContain(`\`${file}\``);
+      expect(manifest).toContain(`\`${hash}\``);
+    }
+  });
+
+  it("keeps V4.3 source and documentation portable and render-time allocation free", async () => {
+    const paths = [
+      "../../app/lib/asset-city.ts",
+      "../../app/components/city/AssetBackedHero.tsx",
+      "../../scripts/generate-city-kit.mjs",
+      "../../docs/VISUAL_CITY_V4_3.md",
+      "../../docs/assets/city-kit-v1-manifest.md",
+    ];
+    for (const path of paths) {
+      const source = await readFile(new URL(path, import.meta.url), "utf8");
+      expect(source).not.toMatch(/\/Users\//);
+    }
+    const assetRenderer = await readFile(
+      new URL("../../app/components/city/AssetBackedHero.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(assetRenderer).not.toContain("useFrame(");
   });
 });

@@ -377,7 +377,7 @@ export function SemanticMetropolis({
       <StaticBoxInstances
         boxes={roadGeometry.guardRails}
         castShadow
-        color="#c5c9c8"
+        color="#59666a"
         material="standard"
         roughness={0.56}
       />
@@ -896,9 +896,11 @@ function WaterBody({
               float ripple = waveA * .52 + waveB * .48;
               float fresnel = pow(1.0 - clamp(abs(vViewDirection.y), 0.0, 1.0), 2.2);
               float glint = smoothstep(.55, .96, ripple);
-              vec3 deep = uColor * (.64 + uNight * .08);
-              vec3 shallow = uColor + vec3(.11, .18, .16);
-              vec3 finalColor = mix(deep, shallow, fresnel * .55 + glint * .2);
+              float shoreBand = smoothstep(.15, .85, abs(sin(vWorld.x * .075)));
+              vec3 deep = vec3(.025, .095, .12) * (1.0 + uNight * .05);
+              vec3 shallow = vec3(.11, .22, .235);
+              vec3 finalColor = mix(deep, shallow, fresnel * .38 + glint * .12);
+              finalColor *= .86 + shoreBand * .14;
               gl_FragColor = vec4(finalColor, .97);
               #include <tonemapping_fragment>
               #include <colorspace_fragment>
@@ -924,9 +926,9 @@ function WaterBody({
       </mesh>
       <mesh geometry={shorelineGeometry} renderOrder={3}>
         <meshBasicMaterial
-          color="#a5c8b7"
+          color="#566b66"
           depthWrite={false}
-          opacity={0.28}
+          opacity={0.42}
           toneMapped={false}
           transparent
         />
@@ -1357,7 +1359,26 @@ function makeVisualSliceGeometry(
           depth: 0.04,
           color: "#29464e",
         });
+        geometry.contextWindows.push({
+          x: building.x + building.width / 2 + 0.025,
+          y: CAMPUS_BASE_Y + 0.9 + floor * 1.18,
+          z: building.z,
+          width: building.depth * 0.68,
+          height: 0.38,
+          depth: 0.04,
+          rotationY: Math.PI / 2,
+          color: floor % 3 === 1 ? "#5c5a50" : "#30474c",
+        });
       }
+      if (building.roof !== "setback") geometry.contextRoofs.push({
+        x: building.x - building.width * 0.18,
+        y: CAMPUS_BASE_Y + building.height + roofHeight + 0.12,
+        z: building.z + building.depth * 0.12,
+        width: building.width * 0.24,
+        height: 0.22,
+        depth: building.depth * 0.28,
+        color: "#555957",
+      });
     }
   }
 
