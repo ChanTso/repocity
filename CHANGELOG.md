@@ -6,7 +6,7 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 
 - No committed post-alpha roadmap or release schedule.
 
-## [0.1.0-alpha.1] — pending owner approval
+## [0.1.0-alpha.1] — 2026-08-01
 
 ### Added
 

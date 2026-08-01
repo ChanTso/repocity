@@ -159,4 +159,4 @@ RepoCity source and original city-kit assets are licensed under [Apache License 
 
 ## Status
 
-This repository is being prepared as **RepoCity v0.1.0-alpha.1 — Public Semantic City Prototype**. The roadmap is intentionally open-ended; no further release cadence is promised. See [CHANGELOG.md](CHANGELOG.md).
+The current release is **RepoCity v0.1.0-alpha.1 — Public Semantic City Prototype**. The roadmap is intentionally open-ended; no further release cadence is promised. See [CHANGELOG.md](CHANGELOG.md).
