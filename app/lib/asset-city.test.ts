@@ -124,7 +124,7 @@ describe("V4.3 asset-backed Chicago proof", () => {
     expect(new Set(Object.values(HERO_GLASS_SYSTEMS).map((system) => system.roughness)).size).toBe(3);
   });
 
-  it("locks five deterministic perspective review transforms", () => {
+  it("locks six deterministic perspective review transforms", () => {
     const first = fixture();
     const reordered = fixture(true);
     const cameras = makeAssetReviewCameraPresets(first.assetHero, first.visualCity);
@@ -135,6 +135,7 @@ describe("V4.3 asset-backed Chicago proof", () => {
       "river-bridge",
       "glass-facade",
       "urban-composition",
+      "public-alpha-hero",
     ]);
     for (const camera of cameras) {
       expect(camera.fov).toBeGreaterThanOrEqual(30);

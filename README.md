@@ -1,118 +1,162 @@
-# RepoCity / 零号城
+<div align="center">
 
-> DeepWiki 让人读懂仓库；RepoCity 让人走进仓库。
+# RepoCity
 
-RepoCity 把 JavaScript / TypeScript Git 仓库编译成一座坐标稳定的 3D
-城市，并把提交历史变成城市从地基到天际线的建设回放。事实分析完全在本地完成；
-Web Viewer 只读取经过 Zod 校验的静态数据包。
+**Turn a codebase into an explorable semantic city.**
 
-![RepoCity social preview](./public/og.png)
+Navigate components, modules, files, symbols, dependencies, Git history, and evidence-backed journeys through an interactive 3D repository map.
 
-## 已实现
+[![CI](https://github.com/ChanTso/repocity/actions/workflows/ci.yml/badge.svg)](https://github.com/ChanTso/repocity/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-v0.1.0--alpha.1-f59e0b.svg)](CHANGELOG.md)
 
-- 254 栋建筑的内置城市，以及 CLI 生成的真实 tiny Git fixture；
-- 按 role/style 批次渲染的 Three.js `InstancedMesh`，不是一栋楼一个 Mesh；
-- District 地块、常驻路牌、雾光、程序化建筑变体和 DPR 上限；
-- 鼠标旋转/缩放/平移、实例 hover/select、双击或 `F` 聚焦；
-- 文件、路径与导出符号搜索，右侧职责/指标/关系/历史 Inspector；
-- 一阶依赖光带，只在选中实体时展开；
-- 播放、暂停、拖动、0.5–4× 倍速、章节、release 与跟随施工镜头；
-- 本地路径或公开 Git URL 分析，覆盖 add/modify/delete/rename/tag；
-- 确定性 District + treemap/grid 布局、稳定实体 ID、delta 与 keyframe；
-- schema、布局、回放、Git 分析、CLI 和渲染 HTML 测试。
+</div>
 
-## 快速开始
+![RepoCity city overview](docs/media/repocity-hero.png)
 
-需要 Node.js 22+ 与本机 Git。
+> [!IMPORTANT]
+> RepoCity is an experimental public alpha. Its repository-semantic mapping and evidence-backed journeys are functional; the renderer, supported repository coverage, and semantic zoom remain active prototypes.
+
+## What is RepoCity?
+
+RepoCity is a local-first 3D repository explorer. It translates software structure into a stable urban hierarchy instead of treating every file as an unrelated tower:
+
+```text
+repository
+└── component / workspace / package
+    └── module or file group
+        └── file
+            └── symbol / export
+```
+
+Districts provide component-level context. Buildings stay linked to real repository entities. Roads aggregate static structural relationships. Evidence-backed journeys trace supported paths through the system without presenting decorative city life as runtime telemetry.
+
+## Highlights
+
+- Deterministic spatial addresses for repository entities
+- Components distributed across connected districts and blocks
+- Building, module-group, file, symbol, and export inspection
+- Evidence-backed repository and delivery journeys
+- Search, selection, focus, Git-history replay, and semantic flow modes
+- River, bridge, street, transit, and asset-backed hero-district context
+- Explicit provenance for inferred and simulated information
+- Local analysis that does not execute the target repository
+
+## Evidence-backed journeys
+
+![RepoCity evidence-backed flow](docs/media/repocity-flow.png)
+
+Flow mode turns supported repository relationships into inspectable journeys. Routes identify their provenance and evidence. They are deliberately separate from ambient vehicles and people, which are non-semantic urban context.
+
+Read [Evidence flows](docs/evidence-flows.md).
+
+## Semantic inspection
+
+![RepoCity semantic inspector](docs/media/repocity-inspector.png)
+
+Select an urban object to inspect the repository entities assigned to it and move from city-level context toward modules, files, symbols, exports, dependencies, and Git history.
+
+Read the [Semantic model](docs/semantic-model.md).
+
+## Street-level visual system
+
+![RepoCity street detail](docs/media/repocity-street-detail.png)
+
+The alpha concentrates its asset-backed visual fidelity in one hero slice using original brick, stone, steel, glass, storefront, street, river-edge, and bridge modules. Outer districts intentionally use simpler level-of-detail geometry.
+
+Read the [Visual system](docs/visual-system.md).
+
+## Quick start
+
+### Prerequisites
+
+- Node.js 22.23.0 or another compatible Node.js 22 release
+- npm 10+
+- Git 2.40+
+- A desktop browser with WebGL 2 support
 
 ```bash
-npm install
+git clone https://github.com/ChanTso/repocity.git
+cd repocity
+npm ci
 npm run dev
 ```
 
-浏览器打开终端输出的本地地址。默认城市是完整产品演示；访问
-`/?project=tiny` 会读取 `public/projects/tiny` 中由真实 5-commit Git
-fixture 生成的数据包。
+Open the local URL printed by the development server. The bundled demonstration is selected by default; `/?project=tiny` loads the deterministic five-commit fixture.
 
-### 编译自己的仓库
+### Analyze a repository
 
 ```bash
 npm run repocity -- build ./path/to/repository \
   --out ./public/projects/my-city
 ```
 
-公开仓库也可以直接使用 URL：
+You can also pass a public Git URL. Open `/?project=my-city` after compilation. Generated data includes repository paths, metrics, relations, Git facts, and optional knowledge Markdown—not complete source files.
+
+### Controls
+
+- Drag to orbit; scroll to zoom; right-drag to pan.
+- Click to select; double-click or press `F` to focus the selection.
+- Press `Cmd/Ctrl+K` to search and `H` to toggle the HUD.
+- In Flow or Replay, press `Space` to play/pause; use arrow keys to step through a flow.
+- Press `1`–`6` for the street, storefront, river/bridge, glass-facade, city-composition, and public-alpha hero cameras.
+
+## Validate
 
 ```bash
-npm run repocity -- build https://github.com/owner/repository.git \
-  --out ./public/projects/my-city
+npm run check
 ```
 
-构建完成后访问 `/?project=my-city`。输出只包含路径、指标、依赖、提交事实和
-可选知识 Markdown，不包含完整源码。
+This runs linting, type checking, workspace and application tests, the production build, and rendered-HTML checks. See [Development](docs/development.md) for individual commands.
 
-### 重建 tiny fixture
+## Architecture
 
-```bash
-npm run fixture:tiny
+```mermaid
+flowchart LR
+    A["Local path or public Git URL"] --> B["Git and code analyzers"]
+    B --> C["Validated semantic bundle"]
+    C --> D["Deterministic city plan"]
+    D --> E["3D explorer and Git replay"]
+    C --> F["Evidence-backed journeys"]
+    F --> E
 ```
 
-命令会打印一个临时 Git 仓库路径。它包含 5 个 commit、2 个 tag、rename、
-add/delete、tsconfig alias 和 ignore 场景。
+The repository graph remains authoritative. Spatial generation arranges facts; it must not fabricate them.
 
-## 常用命令
+- [Architecture](docs/ARCHITECTURE.md)
+- [Data format](docs/DATA_FORMAT.md)
+- [Semantic model](docs/semantic-model.md)
+- [Evidence flows](docs/evidence-flows.md)
+- [Visual system](docs/visual-system.md)
+- [Development](docs/development.md)
 
-```bash
-npm run typecheck   # Viewer + 所有 workspace
-npm run test:unit   # schema/layout/replay/analyzer/CLI
-npm run build       # Cloudflare Worker 兼容生产构建
-npm test            # 单测 + 生产构建 + SSR HTML 检查
-npm run check       # lint + typecheck + 全测试
-```
+## Public alpha boundaries
 
-## 架构
+Available now:
 
-```text
-local Git / public URL
-          │
-          ▼
-  git-analyzer + code-analyzer
-          │
-          ▼
-     city-compiler
-          │
-          ▼
-     replay-engine
-          │
-          ▼
-  static .repocity bundle
-          │
-          ▼
-  React + Three.js Viewer
-```
+- JavaScript and TypeScript repository analysis;
+- stable entity identity across add, rename, modify, and delete history;
+- deterministic city planning and semantic selection;
+- component, building/module-group, file, symbol, and export-oriented inspection;
+- inferred and simulated evidence journeys;
+- original asset-backed hero district and simplified outer-city LOD;
+- desktop Explore, Flow, and Replay experiences.
 
-Viewer 位于仓库根目录的 `@repocity/web`（以兼容 Sites/Vinext 部署）；
-CLI 在 `apps/cli`，共享事实层位于 `packages/*`。
+Known limitations:
 
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — 分析与实体身份
-- [`docs/DATA_FORMAT.md`](./docs/DATA_FORMAT.md) — 静态数据包协议
-- [`docs/PERFORMANCE.md`](./docs/PERFORMANCE.md) — 成本模型和容量边界
-- [`docs/CITY_SIMULATION_RESEARCH.md`](./docs/CITY_SIMULATION_RESEARCH.md) — 城市模拟化调研与取舍
-- [`docs/V2_CITY_SIMULATION_SPEC.md`](./docs/V2_CITY_SIMULATION_SPEC.md) — V2 活城市规格与实施计划
-- [`TASKS.md`](./TASKS.md) — PR 0–5 验收映射
+- the bundled full-city demo is a deterministic product dataset, while `tiny` is generated from a real fixture repository;
+- visual fidelity is intentionally concentrated in the hero district;
+- full semantic zoom and broader language coverage are incomplete;
+- ambient people, vehicles, storefronts, and street furniture are context, not observed telemetry;
+- performance depends on browser, GPU, repository size, and device-pixel ratio;
+- the production build currently reports non-blocking bundle-size and route-classification warnings.
 
-## 隐私与安全
+## Contributing, security, and license
 
-- 私有仓库默认只在本机通过参数化 `git` 子进程读取；
-- 不执行目标仓库代码，也不加载 TypeScript 插件；
-- 默认忽略 `.env`、证书、依赖、vendor、build、coverage 与生成产物；
-- Web Viewer 不需要数据库、账号、GitHub API 或 LLM；
-- AI/Wiki 后续只能作为 `knowledge/` 增强层，不能改写 Git 与依赖事实。
+Contributions are welcome after reading [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities according to [SECURITY.md](SECURITY.md), not in a public issue.
 
-## 当前边界
+RepoCity source and original city-kit assets are licensed under [Apache License 2.0](LICENSE). Third-party packages and their licenses remain their authors' property; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the [asset manifest](docs/assets/city-kit-v1-manifest.md).
 
-- 只分析 `.js`、`.jsx`、`.ts`、`.tsx`；
-- 推荐不超过约 2,000 个源码文件、500 个展示 commit；
-- 当前原始历史都保留，超过 500 commit 的展示折叠仍是后续工作；
-- export 名写入 entity knowledge Markdown；核心 schema 保存 export 数量；
-- 桌面浏览器为完整交互目标，移动端提供可查看的紧凑布局。
+## Status
+
+This repository is being prepared as **RepoCity v0.1.0-alpha.1 — Public Semantic City Prototype**. The roadmap is intentionally open-ended; no further release cadence is promised. See [CHANGELOG.md](CHANGELOG.md).

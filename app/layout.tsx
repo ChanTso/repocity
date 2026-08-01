@@ -19,37 +19,38 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase,
     title: {
-      default: "RepoCity / 零号城",
+      default: "RepoCity — Semantic City Prototype",
       template: "%s · RepoCity",
     },
     description:
-      "把 JS/TS 仓库编译成可探索的 3D 城市，并将 Git 历史回放为城市建设纪录片。",
+      "Turn a codebase into an explorable semantic city with evidence-backed journeys.",
     applicationName: "RepoCity",
     keywords: [
       "RepoCity",
       "Git visualization",
       "codebase explorer",
       "Three.js",
+      "semantic city",
       "代码可视化",
     ],
     openGraph: {
-      title: "RepoCity / 零号城",
-      description: "走进你的代码库，看一座城市如何从第一行代码长成。",
+      title: "RepoCity — Public Semantic City Prototype",
+      description: "Explore repository structure and evidence-backed journeys as an interactive 3D city.",
       type: "website",
       locale: "zh_CN",
       images: [
         {
           url: socialImage,
-          width: 1200,
-          height: 628,
-          alt: "RepoCity 零号城 — 一座由代码长成的城市",
+          width: 1280,
+          height: 640,
+          alt: "RepoCity semantic city beside a river and bridge",
         },
       ],
     },
     twitter: {
       card: "summary_large_image",
-      title: "RepoCity / 零号城",
-      description: "把仓库变成一座有空间记忆与时间因果的 3D 城市。",
+      title: "RepoCity — Public Semantic City Prototype",
+      description: "Turn a codebase into an explorable semantic city.",
       images: [socialImage],
     },
   };

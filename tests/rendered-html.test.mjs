@@ -28,7 +28,11 @@ test("server-renders the RepoCity product shell", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>RepoCity \/ 零号城<\/title>/i);
+  assert.match(
+    html,
+    /<title>RepoCity — Semantic City Prototype<\/title>/i,
+  );
+  assert.match(html, /Turn a codebase into an explorable semantic city/i);
   assert.match(html, /RepoCity/);
   assert.match(html, /零号城/);
   assert.match(html, /城区图谱/);

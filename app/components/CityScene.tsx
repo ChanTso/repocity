@@ -1625,6 +1625,7 @@ function CameraRig({
         "3": "river-bridge",
         "4": "glass-facade",
         "5": "urban-composition",
+        "6": "public-alpha-hero",
       } as const)[event.key];
       if (!bookmark) return;
       event.preventDefault();

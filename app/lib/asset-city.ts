@@ -126,11 +126,12 @@ export type AssetReviewCameraId =
   | "storefront-street"
   | "river-bridge"
   | "glass-facade"
-  | "urban-composition";
+  | "urban-composition"
+  | "public-alpha-hero";
 
 export interface AssetReviewCameraPreset {
   id: AssetReviewCameraId;
-  key: "1" | "2" | "3" | "4" | "5";
+  key: "1" | "2" | "3" | "4" | "5" | "6";
   position: [number, number, number];
   target: [number, number, number];
   fov: number;
@@ -527,5 +528,6 @@ export function makeAssetReviewCameraPresets(
     { id: "river-bridge", key: "3", position: [visualCity.river.minX - 1.55, 2.15, bridge.z + 15.8], target: [(visualCity.river.minX + visualCity.river.maxX) / 2, 0.9, bridge.z - 0.8], fov: 42 },
     { id: "glass-facade", key: "4", position: [glass.x + 16, 5.5, glass.z + 10], target: [glass.x, glass.height * 0.4, glass.z], fov: 42 },
     { id: "urban-composition", key: "5", position: [center.x - 15.5, 9, center.z + 14.5], target: [center.x, 3.1, center.z], fov: 42 },
+    { id: "public-alpha-hero", key: "6", position: [visualCity.river.maxX + 55, 30, bridge.z + 35], target: [center.x + 12, 2.8, center.z + 8], fov: 42 },
   ] as const;
 }
