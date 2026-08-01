@@ -1188,6 +1188,8 @@ kbd {
 .repo-app.hud-hidden .inspector-panel,
 .repo-app.hud-hidden .timeline,
 .repo-app.hud-hidden .flow-console,
+.repo-app.hud-hidden .topbar,
+.repo-app.hud-hidden .hud-toggle-button,
 .repo-app.hud-hidden .city-status,
 .repo-app.hud-hidden .camera-hint,
 .repo-app.hud-hidden .city-stats,
@@ -1196,6 +1198,10 @@ kbd {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+}
+
+.repo-app.hud-hidden .workspace {
+  top: 0;
 }
 
 .repo-app.hud-hidden .map-panel {

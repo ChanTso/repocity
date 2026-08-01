@@ -1,6 +1,7 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import type {
@@ -11,8 +12,22 @@ import type {
   SemanticRoad,
   SemanticWaterBoundary,
 } from "@/app/lib/semantic-city";
+import type { CityPoint } from "@/app/lib/living-city";
+import type {
+  UrbanArchitecturalEnvelope,
+  UrbanFabricPlan,
+  UrbanMaterialKey,
+  UrbanStorefront,
+} from "@/app/lib/urban-fabric";
+import type {
+  HeroFacadeSystem,
+  VisualCityPlan,
+  VisualHeroBlock,
+} from "@/app/lib/visual-city";
 import { stableCityHash } from "@/app/lib/city-visuals";
 import { getTimeOfDayPalette } from "./living-city-render-utils";
+import { planAssetBackedHero } from "@/app/lib/asset-city";
+import { AssetBackedHero } from "./AssetBackedHero";
 
 const LAND_Y = 0;
 const ROAD_Y = 0.12;
@@ -57,6 +72,32 @@ interface CampusGeometry {
   accents: BoxInstance[];
   details: BoxInstance[];
   cylinders: CylinderInstance[];
+  selection: BoxInstance[];
+}
+
+interface VisualSliceGeometry {
+  contextGround: BoxInstance[];
+  contextRoads: BoxInstance[];
+  contextShells: BoxInstance[];
+  contextRoofs: BoxInstance[];
+  contextWindows: BoxInstance[];
+  heroMasonry: BoxInstance[];
+  heroGlass: BoxInstance[];
+  heroInteriors: BoxInstance[];
+  heroFrames: BoxInstance[];
+  heroShopfronts: BoxInstance[];
+  heroAwnings: BoxInstance[];
+  heroDetails: BoxInstance[];
+  heroMassing: BoxInstance[];
+  heroGlassMassing: BoxInstance[];
+  heroRoofClutter: BoxInstance[];
+  heroStreetTrees: CylinderInstance[];
+  heroTreeCrowns: Array<CylinderInstance & { radius: number }>;
+}
+
+interface RenderWaterBoundary {
+  id: string;
+  outline: CityPoint[];
 }
 
 interface RoadGeometry {
@@ -109,6 +150,8 @@ interface MotionAgent {
 
 export interface SemanticMetropolisProps {
   plan: SemanticCityPlan;
+  urbanFabric?: UrbanFabricPlan;
+  visualCity?: VisualCityPlan;
   /**
    * Scenario-authorized agents. Omitting this prop renders no moving entities;
    * static plan relations shape infrastructure but never create traffic.
@@ -125,19 +168,25 @@ export interface SemanticMetropolisProps {
   showTraffic?: boolean;
   showPedestrians?: boolean;
   showWaterTraffic?: boolean;
+  selectedEntityId?: string | null;
   /** Freezes semantic traffic without rebuilding any scene objects. */
   playing?: boolean;
+  onHoverEntity?: (entityId: string | null) => void;
+  onSelectEntity?: (entityId: string) => void;
 }
 
 /**
  * Complete macro replacement for the legacy file-tower city in Flow mode.
  *
  * The component renders only compiler-provided semantic structures. Ambient
- * trees and street furniture carry no software meaning, while campuses,
- * boundaries, roads, and mobility routes remain backed by SemanticCityPlan.
+ * Trees and street furniture carry no software meaning. Semantic facts remain
+ * backed by SemanticCityPlan while V4 projects them into shared streets,
+ * blocks, parcels and buildings through UrbanFabricPlan.
  */
 export function SemanticMetropolis({
   plan,
+  urbanFabric,
+  visualCity,
   mobilityRoutes = EMPTY_MOBILITY_ROUTES,
   timeOfDay = 14,
   reservedEntityIds = EMPTY_ID_SET,
@@ -145,46 +194,114 @@ export function SemanticMetropolis({
   showTraffic = true,
   showPedestrians = true,
   showWaterTraffic = true,
+  selectedEntityId = null,
   playing = true,
+  onHoverEntity,
+  onSelectEntity,
 }: SemanticMetropolisProps) {
   const palette = useMemo(
     () => getTimeOfDayPalette(timeOfDay),
     [timeOfDay],
   );
+  const assetBackedHero = useMemo(
+    () =>
+      urbanFabric && visualCity
+        ? planAssetBackedHero(urbanFabric, visualCity)
+        : null,
+    [urbanFabric, visualCity],
+  );
+  const replacedEnvelopeIds = useMemo(
+    () => new Set(assetBackedHero?.replacedEnvelopeIds ?? []),
+    [assetBackedHero],
+  );
   const campusGeometry = useMemo(
     () =>
-      makeCampusGeometry(
-        plan.campuses,
-        reservedEntityIds,
-        activeComponentIds,
-      ),
-    [activeComponentIds, plan.campuses, reservedEntityIds],
+      urbanFabric
+        ? makeUrbanFabricGeometry(
+            urbanFabric,
+            reservedEntityIds,
+            activeComponentIds,
+            replacedEnvelopeIds,
+          )
+        : makeCampusGeometry(
+            plan.campuses,
+            reservedEntityIds,
+            activeComponentIds,
+          ),
+    [activeComponentIds, plan.campuses, replacedEnvelopeIds, reservedEntityIds, urbanFabric],
+  );
+  const visualSliceGeometry = useMemo(
+    () =>
+      visualCity && urbanFabric
+        ? makeVisualSliceGeometry(visualCity, urbanFabric, replacedEnvelopeIds)
+        : null,
+    [replacedEnvelopeIds, urbanFabric, visualCity],
   );
   const roadGeometry = useMemo(
-    () => makeRoadGeometry(plan.roads),
-    [plan.roads],
+    () => makeRoadGeometry(urbanFabric?.streets ?? plan.roads),
+    [plan.roads, urbanFabric],
   );
   const greenGeometry = useMemo(
-    () => makeGreenGeometry(plan, roadGeometry.surfaceSamples),
-    [plan, roadGeometry.surfaceSamples],
+    () =>
+      makeGreenGeometry(
+        urbanFabric
+          ? { ...plan, campuses: [], roads: urbanFabric.streets }
+          : plan,
+        roadGeometry.surfaceSamples,
+        visualCity?.hero.bounds,
+      ),
+    [plan, roadGeometry.surfaceSamples, urbanFabric, visualCity],
   );
   const displayBounds = useMemo(
-    () => makeMetropolisDisplayBounds(plan),
-    [plan],
+    () =>
+      urbanFabric
+        ? makeUrbanDisplayBounds(urbanFabric)
+        : makeMetropolisDisplayBounds(plan),
+    [plan, urbanFabric],
   );
   const displayWaterBoundaries = useMemo(
     () =>
-      clipWaterBoundaries(
-        plan.terrain.waterBoundaries,
-        displayBounds,
-      ),
-    [displayBounds, plan.terrain.waterBoundaries],
+      visualCity
+        ? [
+            {
+              id: visualCity.river.contextId,
+              outline: [
+                { x: visualCity.river.minX, z: visualCity.river.minZ },
+                { x: visualCity.river.maxX, z: visualCity.river.minZ },
+                { x: visualCity.river.maxX, z: visualCity.river.maxZ },
+                { x: visualCity.river.minX, z: visualCity.river.maxZ },
+              ],
+            },
+          ]
+        : clipWaterBoundaries(plan.terrain.waterBoundaries, displayBounds),
+    [displayBounds, plan.terrain.waterBoundaries, visualCity],
   );
+  const terrainBounds = useMemo(() => {
+    if (visualCity) {
+      return {
+        ...displayBounds,
+        ...visualCity.contextBounds,
+        x: visualCity.contextBounds.x,
+        z: visualCity.contextBounds.z,
+      };
+    }
+    const padding = urbanFabric ? 12 : 0;
+    return {
+      ...displayBounds,
+      minX: displayBounds.minX - padding,
+      maxX: displayBounds.maxX + padding,
+      minZ: displayBounds.minZ - padding,
+      maxZ: displayBounds.maxZ + padding,
+      width: displayBounds.width + padding * 2,
+      depth: displayBounds.depth + padding * 2,
+    };
+  }, [displayBounds, urbanFabric, visualCity]);
 
   return (
     <group name="semantic-metropolis">
+      <RenderDiagnostics urbanFabric={urbanFabric} />
       <SemanticTerrain
-        bounds={displayBounds}
+        bounds={terrainBounds}
         waterBoundaries={displayWaterBoundaries}
       />
       <SemanticWater
@@ -192,6 +309,21 @@ export function SemanticMetropolis({
         color={palette.water}
         night={palette.night}
       />
+
+      {visualSliceGeometry ? (
+        <VisualSliceInstances geometry={visualSliceGeometry} night={palette.night} />
+      ) : null}
+      {assetBackedHero ? (
+        <AssetBackedHero
+          onHoverEntity={onHoverEntity}
+          onSelectEntity={onSelectEntity}
+          plan={assetBackedHero}
+          selectedEntityId={selectedEntityId}
+        />
+      ) : null}
+      {visualCity && urbanFabric && !assetBackedHero ? (
+        <HeroStorefrontSigns plan={urbanFabric} visualCity={visualCity} />
+      ) : null}
 
       <StaticBoxInstances
         boxes={campusGeometry.lawns}
@@ -245,7 +377,7 @@ export function SemanticMetropolis({
       <StaticBoxInstances
         boxes={roadGeometry.guardRails}
         castShadow
-        color="#c5c9c8"
+        color="#59666a"
         material="standard"
         roughness={0.56}
       />
@@ -261,6 +393,8 @@ export function SemanticMetropolis({
         boxes={campusGeometry.shells}
         castShadow
         color="#ffffff"
+        emissive="#5b4938"
+        emissiveIntensity={palette.night * 0.16}
         material="standard"
         receiveShadow
         roughness={0.78}
@@ -269,6 +403,8 @@ export function SemanticMetropolis({
         boxes={campusGeometry.wings}
         castShadow
         color="#ffffff"
+        emissive="#584637"
+        emissiveIntensity={palette.night * 0.14}
         material="standard"
         receiveShadow
         roughness={0.8}
@@ -284,8 +420,8 @@ export function SemanticMetropolis({
       <StaticBoxInstances
         boxes={campusGeometry.glazing}
         color="#ffffff"
-        emissive="#254f55"
-        emissiveIntensity={0.035 + palette.night * 0.72}
+        emissive="#d29d55"
+        emissiveIntensity={0.025 + palette.night * 0.62}
         material="standard"
         roughness={0.28}
       />
@@ -311,6 +447,22 @@ export function SemanticMetropolis({
         color="#758986"
         radialSegments={12}
       />
+      <StaticBoxInstances
+        boxes={campusGeometry.selection}
+        color="#8be4cf"
+        material="basic"
+        opacity={0.72}
+        transparent
+      />
+
+      {urbanFabric ? (
+        <UrbanBuildingHitTargets
+          plan={urbanFabric}
+          onHoverEntity={onHoverEntity}
+          onSelectEntity={onSelectEntity}
+          reservedEntityIds={reservedEntityIds}
+        />
+      ) : null}
 
       <StaticBoxInstances
         boxes={greenGeometry.greenBelts}
@@ -352,6 +504,71 @@ export function SemanticMetropolis({
         showWaterTraffic={showWaterTraffic}
       />
     </group>
+  );
+}
+
+function RenderDiagnostics({
+  urbanFabric,
+}: {
+  urbanFabric?: UrbanFabricPlan;
+}) {
+  const renderer = useThree((state) => state.gl);
+  const smoothedFrameMs = useRef(16.7);
+  const outputRef = useRef<HTMLOutputElement>(null);
+  useLayoutEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    const target = window as Window & {
+      __REPOCITY_RENDER_METRICS__?: Record<string, unknown>;
+    };
+    target.__REPOCITY_RENDER_METRICS__ = {
+      drawCalls: 0,
+      triangles: 0,
+      lines: 0,
+      points: 0,
+      programs: renderer.info.programs?.length ?? 0,
+      frameMs: smoothedFrameMs.current,
+      architecturalEnvelopes:
+        urbanFabric?.morphology.architecturalEnvelopeCount ?? 0,
+      massingVolumes: urbanFabric?.morphology.massingVolumeCount ?? 0,
+      storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
+      facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
+    };
+  }, [renderer, urbanFabric]);
+  useFrame((_state, delta) => {
+    if (process.env.NODE_ENV !== "development") return;
+    smoothedFrameMs.current =
+      smoothedFrameMs.current * 0.92 + delta * 1_000 * 0.08;
+    const target = window as Window & {
+      __REPOCITY_RENDER_METRICS__?: Record<string, unknown>;
+    };
+    target.__REPOCITY_RENDER_METRICS__ = {
+      drawCalls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      lines: renderer.info.render.lines,
+      points: renderer.info.render.points,
+      programs: renderer.info.programs?.length ?? 0,
+      frameMs: Number(smoothedFrameMs.current.toFixed(2)),
+      architecturalEnvelopes:
+        urbanFabric?.morphology.architecturalEnvelopeCount ?? 0,
+      massingVolumes: urbanFabric?.morphology.massingVolumeCount ?? 0,
+      storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
+      facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
+    };
+    const output = outputRef.current;
+    if (output) {
+      output.dataset.drawCalls = String(renderer.info.render.calls);
+      output.dataset.triangles = String(renderer.info.render.triangles);
+      output.dataset.geometries = String(renderer.info.memory.geometries);
+      output.dataset.textures = String(renderer.info.memory.textures);
+      output.dataset.programs = String(renderer.info.programs?.length ?? 0);
+      output.dataset.frameMs = smoothedFrameMs.current.toFixed(2);
+      output.dataset.fps = (1_000 / Math.max(0.01, smoothedFrameMs.current)).toFixed(1);
+    }
+  });
+  return (
+    <Html style={{ display: "none" }}>
+      <output aria-hidden="true" data-repocity-render-metrics ref={outputRef} />
+    </Html>
   );
 }
 
@@ -414,6 +631,21 @@ function makeMetropolisDisplayBounds(
     maxX,
     minZ,
     maxZ,
+  };
+}
+
+function makeUrbanDisplayBounds(
+  plan: UrbanFabricPlan,
+): MetropolisDisplayBounds {
+  return {
+    x: plan.bounds.x,
+    z: plan.bounds.z,
+    width: plan.bounds.width,
+    depth: plan.bounds.depth,
+    minX: plan.bounds.minX,
+    maxX: plan.bounds.maxX,
+    minZ: plan.bounds.minZ,
+    maxZ: plan.bounds.maxZ,
   };
 }
 
@@ -496,7 +728,7 @@ function SemanticTerrain({
   waterBoundaries,
 }: {
   bounds: MetropolisDisplayBounds;
-  waterBoundaries: readonly SemanticWaterBoundary[];
+  waterBoundaries: readonly RenderWaterBoundary[];
 }) {
   const geometry = useMemo(
     () => makeTerrainGeometry(bounds, waterBoundaries),
@@ -517,7 +749,7 @@ function SemanticTerrain({
 
 function makeTerrainGeometry(
   bounds: MetropolisDisplayBounds,
-  waterBoundaries: readonly SemanticWaterBoundary[],
+  waterBoundaries: readonly RenderWaterBoundary[],
 ): THREE.BufferGeometry {
   const shape = new THREE.Shape();
   shape.moveTo(bounds.minX, bounds.minZ);
@@ -543,8 +775,8 @@ function makeTerrainGeometry(
 
   const positions = geometry.getAttribute("position");
   const colors = new Float32Array(positions.count * 3);
-  const cityColor = new THREE.Color("#688d62");
-  const outerColor = new THREE.Color("#4f735b");
+  const cityColor = new THREE.Color("#77766f");
+  const outerColor = new THREE.Color("#4d5653");
   const color = new THREE.Color();
   const gradientDistance = Math.max(4, Math.max(bounds.width, bounds.depth) * 0.12);
   for (let index = 0; index < positions.count; index += 1) {
@@ -575,7 +807,7 @@ function SemanticWater({
   color,
   night,
 }: {
-  boundaries: readonly SemanticWaterBoundary[];
+  boundaries: readonly RenderWaterBoundary[];
   color: string;
   night: number;
 }) {
@@ -598,7 +830,7 @@ function WaterBody({
   color,
   night,
 }: {
-  boundary: SemanticWaterBoundary;
+  boundary: RenderWaterBoundary;
   color: string;
   night: number;
 }) {
@@ -664,9 +896,11 @@ function WaterBody({
               float ripple = waveA * .52 + waveB * .48;
               float fresnel = pow(1.0 - clamp(abs(vViewDirection.y), 0.0, 1.0), 2.2);
               float glint = smoothstep(.55, .96, ripple);
-              vec3 deep = uColor * (.64 + uNight * .08);
-              vec3 shallow = uColor + vec3(.11, .18, .16);
-              vec3 finalColor = mix(deep, shallow, fresnel * .55 + glint * .2);
+              float shoreBand = smoothstep(.15, .85, abs(sin(vWorld.x * .075)));
+              vec3 deep = vec3(.025, .095, .12) * (1.0 + uNight * .05);
+              vec3 shallow = vec3(.11, .22, .235);
+              vec3 finalColor = mix(deep, shallow, fresnel * .38 + glint * .12);
+              finalColor *= .86 + shoreBand * .14;
               gl_FragColor = vec4(finalColor, .97);
               #include <tonemapping_fragment>
               #include <colorspace_fragment>
@@ -692,9 +926,9 @@ function WaterBody({
       </mesh>
       <mesh geometry={shorelineGeometry} renderOrder={3}>
         <meshBasicMaterial
-          color="#a5c8b7"
+          color="#566b66"
           depthWrite={false}
-          opacity={0.28}
+          opacity={0.42}
           toneMapped={false}
           transparent
         />
@@ -743,7 +977,7 @@ function makePolygonGeometry(
 }
 
 function makeShorelineGeometry(
-  boundary: SemanticWaterBoundary,
+  boundary: RenderWaterBoundary,
 ): THREE.BufferGeometry {
   return makeBoundaryRibbonGeometry(
     boundary,
@@ -753,7 +987,7 @@ function makeShorelineGeometry(
 }
 
 function makeBoundaryRibbonGeometry(
-  boundary: SemanticWaterBoundary,
+  boundary: RenderWaterBoundary,
   width: number,
   y: number,
 ): THREE.BufferGeometry {
@@ -795,7 +1029,7 @@ function makeBoundaryRibbonGeometry(
 }
 
 function makeBoundaryWallGeometry(
-  boundary: SemanticWaterBoundary,
+  boundary: RenderWaterBoundary,
 ): THREE.BufferGeometry {
   const positions: number[] = [];
   const indices: number[] = [];
@@ -832,6 +1066,1120 @@ function makeBoundaryWallGeometry(
   return geometry;
 }
 
+const HERO_GLASS_SYSTEMS = new Set<HeroFacadeSystem>([
+  "miesian-black-grid",
+  "blue-green-unitized-glass",
+  "bronze-vertical-fins",
+]);
+
+const CONTEXT_MATERIAL_COLORS: Readonly<
+  Record<VisualCityPlan["contextBuildings"][number]["material"], string>
+> = {
+  brick: "#76574d",
+  limestone: "#aaa79e",
+  concrete: "#7f8582",
+  "dark-glass": "#40565d",
+};
+
+function heroPanel(
+  target: BoxInstance[],
+  envelope: UrbanArchitecturalEnvelope,
+  edge: "north" | "east" | "south" | "west",
+  offset: number,
+  y: number,
+  width: number,
+  height: number,
+  depth: number,
+  surfaceOffset: number,
+  color: string,
+) {
+  const northSouth = edge === "north" || edge === "south";
+  const side = edge === "north" || edge === "west" ? -1 : 1;
+  target.push({
+    x: northSouth
+      ? envelope.x + offset
+      : envelope.x + side * (envelope.width / 2 + surfaceOffset),
+    y: CAMPUS_BASE_Y + y,
+    z: northSouth
+      ? envelope.z + side * (envelope.depth / 2 + surfaceOffset)
+      : envelope.z + offset,
+    width,
+    height,
+    depth,
+    rotationY: northSouth ? 0 : Math.PI / 2,
+    color,
+  });
+}
+
+function facadePalette(system: HeroFacadeSystem): {
+  masonry: string;
+  glass: string;
+  frame: string;
+  interior: string;
+} {
+  if (system === "fulton-warehouse-brick") {
+    return { masonry: "#713e32", glass: "#4d676b", frame: "#332f2a", interior: "#382e27" };
+  }
+  if (system === "chicago-school-terra-cotta") {
+    return { masonry: "#b89263", glass: "#587a7e", frame: "#57483a", interior: "#372f29" };
+  }
+  if (system === "loop-limestone-bay") {
+    return { masonry: "#b9b3a6", glass: "#526d73", frame: "#4d514e", interior: "#312f2c" };
+  }
+  if (system === "miesian-black-grid") {
+    return { masonry: "#303536", glass: "#284850", frame: "#111819", interior: "#162023" };
+  }
+  if (system === "blue-green-unitized-glass") {
+    return { masonry: "#608b8c", glass: "#4a7f88", frame: "#b1b9b3", interior: "#1d3236" };
+  }
+  return { masonry: "#7a6247", glass: "#3f6268", frame: "#806743", interior: "#1f2b2c" };
+}
+
+function addHeroFacade(
+  geometry: VisualSliceGeometry,
+  envelope: UrbanArchitecturalEnvelope,
+  heroBlock: VisualHeroBlock,
+) {
+  const system = heroBlock.facadeSystem;
+  const palette = facadePalette(system);
+  const glassSystem = HERO_GLASS_SYSTEMS.has(system);
+  const floorHeight = system === "fulton-warehouse-brick" ? 1.25 : 1.04;
+  const floors = Math.max(3, Math.min(15, Math.floor((envelope.height - 2.25) / floorHeight)));
+  // Tall hero volumes must read as complete buildings from orbit, not stage
+  // flats with a finished street side and a blank rear wall.
+  for (const edge of ["north", "east", "south", "west"] as const) {
+    const span = edge === "north" || edge === "south" ? envelope.width : envelope.depth;
+    const bayWidth = glassSystem ? 0.72 : system === "fulton-warehouse-brick" ? 1.18 : 0.92;
+    const bays = Math.max(2, Math.min(10, Math.floor(span / bayWidth)));
+    const actualBay = span / bays;
+    for (let floor = 0; floor < floors; floor += 1) {
+      const y = 2.45 + floor * floorHeight + floorHeight * 0.48;
+      for (let bay = 0; bay < bays; bay += 1) {
+        const offset = -span / 2 + actualBay * (bay + 0.5);
+        heroPanel(
+          geometry.heroInteriors,
+          envelope,
+          edge,
+          offset,
+          y,
+          actualBay * (glassSystem ? 0.84 : 0.58),
+          floorHeight * 0.64,
+          0.09,
+          0.018,
+          palette.interior,
+        );
+        heroPanel(
+          glassSystem ? geometry.heroGlass : geometry.heroMasonry,
+          envelope,
+          edge,
+          offset,
+          y,
+          actualBay * (glassSystem ? 0.79 : 0.54),
+          floorHeight * (glassSystem ? 0.57 : 0.55),
+          glassSystem ? 0.045 : 0.085,
+          glassSystem ? 0.075 : 0.09,
+          glassSystem ? palette.glass : "#49656a",
+        );
+      }
+      heroPanel(
+        geometry.heroFrames,
+        envelope,
+        edge,
+        0,
+        2.35 + floor * floorHeight,
+        span * 0.98,
+        glassSystem ? 0.07 : 0.13,
+        0.08,
+        0.11,
+        palette.frame,
+      );
+    }
+    for (let bay = 0; bay <= bays; bay += 1) {
+      const offset = -span / 2 + (span / bays) * bay;
+      heroPanel(
+        glassSystem ? geometry.heroFrames : geometry.heroMasonry,
+        envelope,
+        edge,
+        offset,
+        2.25 + (floors * floorHeight) / 2,
+        glassSystem ? 0.065 : Math.max(0.13, actualBay * 0.16),
+        floors * floorHeight + 0.2,
+        glassSystem ? 0.075 : 0.11,
+        0.115,
+        glassSystem ? palette.frame : palette.masonry,
+      );
+    }
+    if (system === "bronze-vertical-fins") {
+      for (let bay = 0; bay <= bays; bay += 2) {
+        heroPanel(
+          geometry.heroDetails,
+          envelope,
+          edge,
+          -span / 2 + (span / bays) * bay,
+          2.25 + (floors * floorHeight) / 2,
+          0.1,
+          floors * floorHeight + 0.3,
+          0.32,
+          0.19,
+          "#9a7a48",
+        );
+      }
+    }
+    heroPanel(
+      geometry.heroDetails,
+      envelope,
+      edge,
+      0,
+      envelope.height + 0.1,
+      span * 1.035,
+      system === "fulton-warehouse-brick" ? 0.34 : 0.18,
+      0.22,
+      0.18,
+      glassSystem ? palette.frame : palette.masonry,
+    );
+    if (system === "fulton-warehouse-brick") {
+      const escapeX = span * 0.2;
+      for (let floor = 1; floor < floors; floor += 2) {
+        heroPanel(
+          geometry.heroDetails,
+          envelope,
+          edge,
+          escapeX,
+          2.5 + floor * floorHeight,
+          1.35,
+          0.07,
+          0.46,
+          0.36,
+          "#2d302e",
+        );
+      }
+      for (const railOffset of [escapeX - 0.58, escapeX + 0.58]) {
+        heroPanel(
+          geometry.heroDetails,
+          envelope,
+          edge,
+          railOffset,
+          2.45 + (floors * floorHeight) / 2,
+          0.055,
+          floors * floorHeight,
+          0.32,
+          0.34,
+          "#2d302e",
+        );
+      }
+    }
+  }
+}
+
+function makeVisualSliceGeometry(
+  visualCity: VisualCityPlan,
+  urbanFabric: UrbanFabricPlan,
+  replacedEnvelopeIds: ReadonlySet<string>,
+): VisualSliceGeometry {
+  const replacedBlockIds = new Set(
+    urbanFabric.architecturalEnvelopes
+      .filter((envelope) => replacedEnvelopeIds.has(envelope.id))
+      .map((envelope) => envelope.blockId),
+  );
+  const geometry: VisualSliceGeometry = {
+    contextGround: [],
+    contextRoads: [],
+    contextShells: [],
+    contextRoofs: [],
+    contextWindows: [],
+    heroMasonry: [],
+    heroGlass: [],
+    heroInteriors: [],
+    heroFrames: [],
+    heroShopfronts: [],
+    heroAwnings: [],
+    heroDetails: [],
+    heroMassing: [],
+    heroGlassMassing: [],
+    heroRoofClutter: [],
+    heroStreetTrees: [],
+    heroTreeCrowns: [],
+  };
+  for (const block of visualCity.contextBlocks) {
+    geometry.contextGround.push({
+      x: block.x,
+      y: LAND_Y + 0.025,
+      z: block.z,
+      width: block.width,
+      height: 0.05,
+      depth: block.depth,
+      color: block.ring === 1 ? "#73766f" : block.ring === 2 ? "#686c67" : "#5e635f",
+    });
+  }
+  for (const road of visualCity.contextRoads) {
+    const [start, end] = road.centerline;
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+    geometry.contextRoads.push({
+      x: (start.x + end.x) / 2,
+      y: ROAD_Y - 0.025,
+      z: (start.z + end.z) / 2,
+      width: length,
+      height: 0.05,
+      depth: road.width,
+      rotationY: -Math.atan2(dz, dx),
+      color: road.ring === 1 ? "#394348" : "#3f484b",
+    });
+  }
+  for (const building of visualCity.contextBuildings) {
+    geometry.contextShells.push({
+      x: building.x,
+      y: CAMPUS_BASE_Y + building.height / 2,
+      z: building.z,
+      width: building.width,
+      height: building.height,
+      depth: building.depth,
+      color: CONTEXT_MATERIAL_COLORS[building.material],
+    });
+    const roofHeight = building.roof === "mechanical" ? 0.44 : building.roof === "setback" ? 0.24 : 0.12;
+    geometry.contextRoofs.push({
+      x: building.x,
+      y: CAMPUS_BASE_Y + building.height + roofHeight / 2,
+      z: building.z,
+      width: building.width * (building.roof === "setback" ? 0.62 : 0.82),
+      height: roofHeight,
+      depth: building.depth * (building.roof === "setback" ? 0.6 : 0.76),
+      color: "#4b5150",
+    });
+    if (building.ring === 1) {
+      const floors = Math.min(8, Math.max(2, Math.floor(building.height / 1.25)));
+      for (let floor = 0; floor < floors; floor += 1) {
+        geometry.contextWindows.push({
+          x: building.x,
+          y: CAMPUS_BASE_Y + 0.9 + floor * 1.18,
+          z: building.z - building.depth / 2 - 0.025,
+          width: building.width * 0.72,
+          height: 0.42,
+          depth: 0.04,
+          color: "#29464e",
+        });
+        geometry.contextWindows.push({
+          x: building.x + building.width / 2 + 0.025,
+          y: CAMPUS_BASE_Y + 0.9 + floor * 1.18,
+          z: building.z,
+          width: building.depth * 0.68,
+          height: 0.38,
+          depth: 0.04,
+          rotationY: Math.PI / 2,
+          color: floor % 3 === 1 ? "#5c5a50" : "#30474c",
+        });
+      }
+      if (building.roof !== "setback") geometry.contextRoofs.push({
+        x: building.x - building.width * 0.18,
+        y: CAMPUS_BASE_Y + building.height + roofHeight + 0.12,
+        z: building.z + building.depth * 0.12,
+        width: building.width * 0.24,
+        height: 0.22,
+        depth: building.depth * 0.28,
+        color: "#555957",
+      });
+    }
+  }
+
+  const heroByBlockId = new Map(visualCity.hero.blocks.map((block) => [block.blockId, block]));
+  const envelopesByBlockId = new Map<string, UrbanArchitecturalEnvelope[]>();
+  for (const envelope of urbanFabric.architecturalEnvelopes) {
+    if (!heroByBlockId.has(envelope.blockId)) continue;
+    const candidates = envelopesByBlockId.get(envelope.blockId) ?? [];
+    candidates.push(envelope);
+    envelopesByBlockId.set(envelope.blockId, candidates);
+  }
+  for (const heroBlock of visualCity.hero.blocks) {
+    const envelopes = (envelopesByBlockId.get(heroBlock.blockId) ?? []).sort((left, right) => left.id.localeCompare(right.id, "en"));
+    for (const [index, envelope] of envelopes.entries()) {
+      if (replacedEnvelopeIds.has(envelope.id)) continue;
+      const bonus = index === 0
+        ? heroBlock.role === "civic-podium-tower"
+          ? 10
+          : heroBlock.role === "modern-glass-corner"
+            ? 7
+            : heroBlock.role === "loop-masonry-streetwall"
+              ? 5
+              : heroBlock.role === "riverfront-bridge-gateway"
+                ? 3
+                : 0
+        : 0;
+      const detailedEnvelope = bonus > 0 ? { ...envelope, height: envelope.height + bonus } : envelope;
+      if (bonus > 0) {
+        const glass = HERO_GLASS_SYSTEMS.has(heroBlock.facadeSystem);
+        const palette = facadePalette(heroBlock.facadeSystem);
+        (glass ? geometry.heroGlassMassing : geometry.heroMassing).push({
+          x: detailedEnvelope.x,
+          y: CAMPUS_BASE_Y + detailedEnvelope.height / 2,
+          z: detailedEnvelope.z,
+          width: detailedEnvelope.width,
+          height: detailedEnvelope.height,
+          depth: detailedEnvelope.depth,
+          color: glass ? palette.interior : palette.masonry,
+        });
+        geometry.heroRoofClutter.push(
+          {
+            x: detailedEnvelope.x - detailedEnvelope.width * 0.18,
+            y: CAMPUS_BASE_Y + detailedEnvelope.height + 0.25,
+            z: detailedEnvelope.z,
+            width: detailedEnvelope.width * 0.22,
+            height: 0.5,
+            depth: detailedEnvelope.depth * 0.24,
+            color: "#48504e",
+          },
+          {
+            x: detailedEnvelope.x + detailedEnvelope.width * 0.19,
+            y: CAMPUS_BASE_Y + detailedEnvelope.height + 0.16,
+            z: detailedEnvelope.z + detailedEnvelope.depth * 0.12,
+            width: detailedEnvelope.width * 0.12,
+            height: 0.32,
+            depth: detailedEnvelope.depth * 0.14,
+            color: "#343b3a",
+          },
+        );
+      }
+      addHeroFacade(geometry, detailedEnvelope, heroBlock);
+    }
+  }
+  for (const storefront of urbanFabric.storefronts) {
+    if (!heroByBlockId.has(storefront.blockId)) continue;
+    if (replacedEnvelopeIds.has(storefront.architecturalEnvelopeId)) continue;
+    const side = storefront.edge === "north" || storefront.edge === "west" ? -1 : 1;
+    const northSouth = storefront.edge === "north" || storefront.edge === "south";
+    geometry.heroShopfronts.push({
+      x: storefront.x + (northSouth ? 0 : side * 0.07),
+      y: CAMPUS_BASE_Y + 0.92,
+      z: storefront.z + (northSouth ? side * 0.07 : 0),
+      width: storefront.width * 0.94,
+      height: 1.32,
+      depth: 0.085,
+      rotationY: storefront.rotation,
+      color: "#233e43",
+    });
+    geometry.heroAwnings.push({
+      x: storefront.x + (northSouth ? 0 : side * 0.17),
+      y: CAMPUS_BASE_Y + 1.55,
+      z: storefront.z + (northSouth ? side * 0.17 : 0),
+      width: storefront.width * 0.88,
+      height: 0.1,
+      depth: 0.46,
+      rotationX: northSouth ? -side * 0.12 : 0,
+      rotationY: storefront.rotation,
+      rotationZ: northSouth ? 0 : side * 0.12,
+      color: storefront.active ? "#b56343" : "#6c716c",
+    });
+  }
+  for (const heroBlock of visualCity.hero.blocks) {
+    if (replacedBlockIds.has(heroBlock.blockId)) continue;
+    const { block } = heroBlock;
+    for (const side of [-1, 1] as const) {
+      for (let index = -1; index <= 1; index += 1) {
+        const x = block.x + index * (block.width * 0.28);
+        const z = block.z + side * (block.depth / 2 + 0.5);
+        geometry.heroStreetTrees.push({ x, y: CAMPUS_BASE_Y + 0.7, z, radius: 0.085, height: 1.4, color: "#514337" });
+        geometry.heroTreeCrowns.push({ x, y: CAMPUS_BASE_Y + 1.62, z, radius: 0.48, height: 0.7, color: side === 1 ? "#486c46" : "#52764e" });
+      }
+    }
+  }
+  return geometry;
+}
+
+function makeBrickTexture(): THREE.DataTexture {
+  const size = 64;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const index = (y * size + x) * 4;
+      const row = Math.floor(y / 8);
+      const mortar = y % 8 === 0 || (x + (row % 2) * 8) % 16 === 0;
+      const noise = (x * 13 + y * 7) % 17;
+      data[index] = mortar ? 205 : 148 + noise;
+      data[index + 1] = mortar ? 205 : 148 + noise;
+      data[index + 2] = mortar ? 205 : 148 + noise;
+      data[index + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function makeCityReflectionTexture(): THREE.DataTexture {
+  const width = 64;
+  const height = 32;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    const horizon = y / (height - 1);
+    for (let x = 0; x < width; x += 1) {
+      const index = (y * width + x) * 4;
+      const band = Math.sin(x * 0.55) > 0.5 && y > 16 ? 24 : 0;
+      data[index] = 58 + Math.floor(horizon * 80) + band;
+      data[index + 1] = 91 + Math.floor(horizon * 70) + band;
+      data[index + 2] = 108 + Math.floor(horizon * 58) + band;
+      data[index + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function VisualSliceInstances({ geometry, night }: { geometry: VisualSliceGeometry; night: number }) {
+  const brickTexture = useMemo(() => makeBrickTexture(), []);
+  const reflectionTexture = useMemo(() => makeCityReflectionTexture(), []);
+  return (
+    <group name="visual-city-v4-1-context">
+      <StaticBoxInstances boxes={geometry.contextGround} color="#6d716b" material="standard" receiveShadow roughness={0.98} />
+      <StaticBoxInstances boxes={geometry.contextRoads} color="#3d474b" material="standard" receiveShadow roughness={0.9} />
+      <StaticBoxInstances boxes={geometry.contextShells} castShadow color="#ffffff" material="standard" receiveShadow roughness={0.84} />
+      <StaticBoxInstances boxes={geometry.contextRoofs} castShadow color="#505654" material="standard" roughness={0.74} />
+      <StaticBoxInstances boxes={geometry.contextWindows} color="#29464e" emissive="#d99b55" emissiveIntensity={night * 0.32} material="standard" roughness={0.32} />
+      <StaticBoxInstances boxes={geometry.heroMasonry} castShadow color="#ffffff" map={brickTexture} material="standard" receiveShadow roughness={0.94} />
+      <StaticBoxInstances boxes={geometry.heroMassing} castShadow color="#ffffff" map={brickTexture} material="standard" receiveShadow roughness={0.94} />
+      <StaticBoxInstances boxes={geometry.heroGlassMassing} castShadow color="#ffffff" material="standard" metalness={0.14} receiveShadow roughness={0.4} />
+      <StaticBoxInstances boxes={geometry.heroInteriors} color="#1a2425" emissive="#d9a968" emissiveIntensity={0.04 + night * 0.68} material="standard" roughness={0.88} />
+      <StaticBoxInstances boxes={geometry.heroGlass} color="#ffffff" envMap={reflectionTexture} material="physical" metalness={0.12} opacity={0.84} roughness={0.12} transparent />
+      <StaticBoxInstances boxes={geometry.heroFrames} castShadow color="#ffffff" material="standard" metalness={0.54} roughness={0.35} />
+      <StaticBoxInstances boxes={geometry.heroShopfronts} color="#233e43" envMap={reflectionTexture} material="physical" opacity={0.9} roughness={0.16} transparent />
+      <StaticBoxInstances boxes={geometry.heroAwnings} castShadow color="#ffffff" material="standard" roughness={0.72} />
+      <StaticBoxInstances boxes={geometry.heroDetails} castShadow color="#ffffff" material="standard" metalness={0.62} roughness={0.32} />
+      <StaticBoxInstances boxes={geometry.heroRoofClutter} castShadow color="#ffffff" material="standard" metalness={0.18} roughness={0.72} />
+      <StaticCylinderInstances cylinders={geometry.heroStreetTrees} color="#514337" radialSegments={8} castShadow />
+      <StaticCylinderInstances cylinders={geometry.heroTreeCrowns} color="#52764e" radialSegments={10} castShadow />
+    </group>
+  );
+}
+
+function HeroStorefrontSigns({ plan, visualCity }: { plan: UrbanFabricPlan; visualCity: VisualCityPlan }) {
+  const heroIds = new Set(visualCity.hero.blockIds);
+  const signs = visualCity.hero.blocks.flatMap((heroBlock) => {
+    const candidates = plan.storefronts
+      .filter((storefront) => storefront.blockId === heroBlock.blockId && storefront.active)
+      .sort((left, right) => left.id.localeCompare(right.id, "en"));
+    return candidates.slice(0, 1);
+  });
+  return (
+    <group name="hero-storefront-signs">
+      {signs.filter((sign) => heroIds.has(sign.blockId)).map((sign) => (
+        <Html
+          center
+          distanceFactor={14}
+          key={sign.id}
+          position={[sign.x, CAMPUS_BASE_Y + 1.74, sign.z]}
+          sprite
+          transform
+          zIndexRange={[8, 0]}
+        >
+          <span style={{
+            background: "rgba(30, 33, 31, .88)",
+            border: "1px solid rgba(238, 215, 166, .65)",
+            borderRadius: 2,
+            color: "#f4e4bd",
+            display: "block",
+            fontFamily: "ui-sans-serif, system-ui, sans-serif",
+            fontSize: 7,
+            fontWeight: 700,
+            letterSpacing: ".08em",
+            padding: "1px 3px",
+            textTransform: "uppercase",
+            whiteSpace: "nowrap",
+          }}>{sign.signLabel}</span>
+        </Html>
+      ))}
+    </group>
+  );
+}
+
+const URBAN_MATERIAL_COLORS: Readonly<Record<UrbanMaterialKey, string>> = {
+  limestone: "#c8c4b8",
+  "warm-concrete": "#aaa59a",
+  brick: "#947d70",
+  slate: "#727b7d",
+  "red-brick": "#8a493c",
+  "cream-terra-cotta": "#c8ab7e",
+  "dark-metal": "#263337",
+  "blue-green-glass": "#6b9294",
+  "bronze-metal": "#765d43",
+};
+
+function emptyCampusGeometry(): CampusGeometry {
+  return {
+    plazas: [],
+    lawns: [],
+    shells: [],
+    wings: [],
+    roofs: [],
+    glazing: [],
+    accents: [],
+    details: [],
+    cylinders: [],
+    selection: [],
+  };
+}
+
+function addFacadePanel(
+  target: BoxInstance[],
+  envelope: UrbanArchitecturalEnvelope,
+  edge: "north" | "east" | "south" | "west",
+  offset: number,
+  y: number,
+  width: number,
+  height: number,
+  depth: number,
+  color: string,
+) {
+  const northSouth = edge === "north" || edge === "south";
+  target.push({
+    x: northSouth
+      ? envelope.x + offset
+      : envelope.x + (edge === "west" ? -1 : 1) * (envelope.width / 2 + 0.025),
+    y: CAMPUS_BASE_Y + y,
+    z: northSouth
+      ? envelope.z + (edge === "north" ? -1 : 1) * (envelope.depth / 2 + 0.025)
+      : envelope.z + offset,
+    width,
+    height,
+    depth,
+    rotationY: northSouth ? 0 : Math.PI / 2,
+    color,
+  });
+}
+
+function addChicagoFacade(
+  geometry: CampusGeometry,
+  envelope: UrbanArchitecturalEnvelope,
+) {
+  const streetEdges = [envelope.primaryEdge, envelope.secondaryEdge] as const;
+  const curtain = Boolean(envelope.curtainWallVariant);
+  const warehouse =
+    envelope.facadeFamily === "fulton-brick-warehouse" ||
+    envelope.facadeFamily === "narrow-storefront-row";
+  const civic = envelope.facadeFamily === "civic-institutional";
+  const glazingColor =
+    envelope.curtainWallVariant === "light-blue-green-grid"
+      ? "#7fa7aa"
+      : envelope.curtainWallVariant === "bronze-vertical-fins"
+        ? "#746f64"
+        : curtain
+          ? "#455a60"
+          : "#4d6970";
+  const frameColor =
+    envelope.curtainWallVariant === "bronze-vertical-fins"
+      ? "#7d6549"
+      : curtain
+        ? "#263237"
+        : envelope.facadeFamily === "fulton-brick-warehouse"
+          ? "#d0b691"
+          : "#756b5e";
+  const availableHeight = Math.max(2.4, envelope.height - 2.15);
+  const floorHeight = warehouse ? 1.25 : curtain ? 0.92 : 1.08;
+  const floorCount = Math.max(
+    2,
+    Math.min(11, Math.floor(availableHeight / floorHeight)),
+  );
+
+  for (const edge of streetEdges) {
+    const facadeLength =
+      edge === "north" || edge === "south"
+        ? envelope.width
+        : envelope.depth;
+    const bayCount = Math.max(2, Math.min(5, Math.floor(facadeLength / 0.84)));
+    const bayPitch = (facadeLength * 0.82) / bayCount;
+    for (let floor = 0; floor < floorCount; floor += 1) {
+      const y = 2.25 + floor * floorHeight;
+      for (let bay = 0; bay < bayCount; bay += 1) {
+        const offset = (bay - (bayCount - 1) / 2) * bayPitch;
+        addFacadePanel(
+          geometry.glazing,
+          envelope,
+          edge,
+          offset,
+          y,
+          bayPitch * (curtain ? 0.9 : civic ? 0.46 : warehouse ? 0.64 : 0.57),
+          floorHeight * (curtain ? 0.72 : warehouse ? 0.66 : 0.56),
+          0.055,
+          glazingColor,
+        );
+      }
+      if (curtain || warehouse) {
+        addFacadePanel(
+          geometry.details,
+          envelope,
+          edge,
+          0,
+          y - floorHeight * 0.48,
+          facadeLength * 0.88,
+          curtain ? 0.08 : 0.12,
+          0.07,
+          frameColor,
+        );
+      }
+    }
+    if (curtain) {
+      for (let bay = 0; bay <= bayCount; bay += 1) {
+        addFacadePanel(
+          geometry.details,
+          envelope,
+          edge,
+          (bay - bayCount / 2) * bayPitch,
+          2.15 + (floorCount * floorHeight) / 2,
+          0.055,
+          floorCount * floorHeight,
+          0.075,
+          frameColor,
+        );
+      }
+    }
+    if (!curtain) {
+      addFacadePanel(
+        geometry.details,
+        envelope,
+        edge,
+        0,
+        Math.min(envelope.height - 0.18, 2.15 + floorCount * floorHeight),
+        facadeLength * 0.94,
+        envelope.facadeFamily === "art-deco-setback" ? 0.26 : 0.16,
+        0.1,
+        frameColor,
+      );
+    }
+    if (envelope.facadeFamily === "riverfront-terrace") {
+      for (let terrace = 0; terrace < Math.min(3, floorCount - 1); terrace += 1) {
+        addFacadePanel(
+          geometry.accents,
+          envelope,
+          edge,
+          0,
+          3.05 + terrace * floorHeight * 1.75,
+          facadeLength * (0.82 - terrace * 0.08),
+          0.08,
+          0.34,
+          "#a6aaa4",
+        );
+      }
+    }
+    if (
+      envelope.facadeFamily === "art-deco-setback" ||
+      envelope.facadeFamily === "chicago-school-masonry"
+    ) {
+      for (const pier of [-1, 1]) {
+        addFacadePanel(
+          geometry.details,
+          envelope,
+          edge,
+          pier * facadeLength * 0.31,
+          Math.min(envelope.height, 2.1 + floorCount * floorHeight) / 2 + 1,
+          envelope.facadeFamily === "art-deco-setback" ? 0.11 : 0.08,
+          Math.min(envelope.height - 0.4, floorCount * floorHeight + 1.4),
+          0.085,
+          frameColor,
+        );
+      }
+    }
+    if (envelope.facadeFamily === "narrow-storefront-row") {
+      addFacadePanel(
+        geometry.details,
+        envelope,
+        edge,
+        0,
+        Math.min(envelope.height - 0.05, 2.3 + floorCount * floorHeight),
+        facadeLength,
+        0.12,
+        0.18,
+        "#493f37",
+      );
+    }
+  }
+
+  if (envelope.landmark) {
+    geometry.cylinders.push({
+      x: envelope.x,
+      y: CAMPUS_BASE_Y + envelope.height + 0.9,
+      z: envelope.z,
+      radius: 0.12,
+      height: 1.8,
+      color: "#4e5d60",
+    });
+  }
+}
+
+function storefrontColor(storefront: UrbanStorefront): string {
+  const colors = [
+    "#a64f3d",
+    "#315f76",
+    "#52734b",
+    "#d29b42",
+    "#6d4f79",
+    "#bd6d3d",
+    "#48777a",
+    "#9a5c70",
+    "#a33f35",
+    "#4f657a",
+  ];
+  return colors[stableCityHash(storefront.category) % colors.length]!;
+}
+
+function addUrbanStorefront(
+  geometry: CampusGeometry,
+  storefront: UrbanStorefront,
+) {
+  const color = storefrontColor(storefront);
+  geometry.glazing.push({
+    x: storefront.x,
+    y: CAMPUS_BASE_Y + 0.88,
+    z: storefront.z,
+    width: storefront.width,
+    height: 1.22,
+    depth: 0.075,
+    rotationY: storefront.rotation,
+    color: "#314e54",
+  });
+  geometry.accents.push({
+    x: storefront.x,
+    y: CAMPUS_BASE_Y + 1.57,
+    z: storefront.z,
+    width: storefront.width * 0.92,
+    height: 0.24,
+    depth: 0.14,
+    rotationY: storefront.rotation,
+    color,
+  });
+  if (stableCityHash(storefront.id) % 4 !== 0) {
+    const direction =
+      storefront.edge === "north" || storefront.edge === "west" ? -1 : 1;
+    geometry.accents.push({
+      x:
+        storefront.edge === "east" || storefront.edge === "west"
+          ? storefront.x + direction * 0.16
+          : storefront.x,
+      y: CAMPUS_BASE_Y + 1.4,
+      z:
+        storefront.edge === "north" || storefront.edge === "south"
+          ? storefront.z + direction * 0.16
+          : storefront.z,
+      width: storefront.width * 0.78,
+      height: 0.08,
+      depth: 0.42,
+      rotationX: -0.08,
+      rotationY: storefront.rotation,
+      color,
+    });
+  }
+  if (stableCityHash(storefront.signLabel) % 3 === 0) {
+    const direction =
+      storefront.edge === "north" || storefront.edge === "west" ? -1 : 1;
+    geometry.accents.push({
+      x:
+        storefront.edge === "east" || storefront.edge === "west"
+          ? storefront.x + direction * 0.32
+          : storefront.x + storefront.width * 0.36,
+      y: CAMPUS_BASE_Y + 1.24,
+      z:
+        storefront.edge === "north" || storefront.edge === "south"
+          ? storefront.z + direction * 0.32
+          : storefront.z + storefront.width * 0.36,
+      width: 0.08,
+      height: 0.38,
+      depth: 0.42,
+      rotationY: storefront.rotation,
+      color,
+    });
+  }
+  geometry.details.push(
+    {
+      x: storefront.x,
+      y: CAMPUS_BASE_Y + 0.9,
+      z: storefront.z,
+      width: 0.055,
+      height: 1.28,
+      depth: 0.1,
+      rotationY: storefront.rotation,
+      color: "#c3bca9",
+    },
+    {
+      x: storefront.x,
+      y: CAMPUS_BASE_Y + 0.24,
+      z: storefront.z,
+      width: storefront.width * 0.96,
+      height: 0.08,
+      depth: 0.16,
+      rotationY: storefront.rotation,
+      color: "#b9b5a9",
+    },
+  );
+}
+
+function makeUrbanFabricGeometry(
+  plan: UrbanFabricPlan,
+  reservedEntityIds: ReadonlySet<string>,
+  activeComponentIds: ReadonlySet<string> | null,
+  replacedEnvelopeIds: ReadonlySet<string> = EMPTY_ID_SET,
+): CampusGeometry {
+  const geometry = emptyCampusGeometry();
+  const reservedBuildingIds = new Set(
+    [...reservedEntityIds]
+      .map((entityId) => plan.entityAddresses[entityId]?.buildingId)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const visibleEnvelopeIds = new Set(
+    plan.architecturalEnvelopes
+      .filter(
+        (envelope) =>
+          !reservedBuildingIds.has(envelope.semanticBuildingId) &&
+          !replacedEnvelopeIds.has(envelope.id),
+      )
+      .map((envelope) => envelope.id),
+  );
+  for (const block of plan.blocks) {
+    const alley = block.characterZone === "fulton-market" ? 0.58 : 0.42;
+    geometry.plazas.push(
+      {
+        x: block.x,
+        y: CAMPUS_BASE_Y + 0.025,
+        z: block.z,
+        width: alley,
+        height: 0.05,
+        depth: block.depth - 0.5,
+        color: "#85877f",
+      },
+      {
+        x: block.x,
+        y: CAMPUS_BASE_Y + 0.03,
+        z: block.z,
+        width: block.width - 0.5,
+        height: 0.055,
+        depth: alley,
+        color: "#8d8c83",
+      },
+    );
+  }
+  for (const mass of plan.massingVolumes) {
+    if (!visibleEnvelopeIds.has(mass.architecturalEnvelopeId)) continue;
+    const target =
+      mass.kind === "roof-house" || mass.kind === "crown"
+        ? geometry.roofs
+        : mass.kind === "base" || mass.kind === "shoulder"
+          ? geometry.wings
+          : geometry.shells;
+    target.push({
+      x: mass.x,
+      y: CAMPUS_BASE_Y + mass.y,
+      z: mass.z,
+      width: mass.width,
+      height: mass.height,
+      depth: mass.depth,
+      rotationY: mass.rotation,
+      color: URBAN_MATERIAL_COLORS[mass.material],
+    });
+  }
+  for (const envelope of plan.architecturalEnvelopes) {
+    if (!visibleEnvelopeIds.has(envelope.id)) continue;
+    addChicagoFacade(geometry, envelope);
+  }
+  for (const storefront of plan.storefronts) {
+    if (!visibleEnvelopeIds.has(storefront.architecturalEnvelopeId)) continue;
+    addUrbanStorefront(geometry, storefront);
+  }
+  if (activeComponentIds && activeComponentIds.size > 0) {
+    const assignmentByComponentId = new Map(
+      plan.componentAssignments.map((assignment) => [
+        assignment.componentId,
+        assignment,
+      ]),
+    );
+    for (const block of plan.blocks) {
+      const componentId = [...activeComponentIds].find((candidate) =>
+        assignmentByComponentId.get(candidate)?.blockIds.includes(block.id),
+      );
+      if (!componentId) continue;
+      const color =
+        assignmentByComponentId.get(componentId)?.accentColor ?? "#8be4cf";
+      const edge = 0.28;
+      geometry.selection.push(
+        {
+          x: block.x,
+          y: CAMPUS_BASE_Y + 0.075,
+          z: block.z - block.depth / 2,
+          width: block.width + edge,
+          height: 0.07,
+          depth: edge,
+          color,
+        },
+        {
+          x: block.x,
+          y: CAMPUS_BASE_Y + 0.075,
+          z: block.z + block.depth / 2,
+          width: block.width + edge,
+          height: 0.07,
+          depth: edge,
+          color,
+        },
+        {
+          x: block.x - block.width / 2,
+          y: CAMPUS_BASE_Y + 0.075,
+          z: block.z,
+          width: edge,
+          height: 0.07,
+          depth: block.depth + edge,
+          color,
+        },
+        {
+          x: block.x + block.width / 2,
+          y: CAMPUS_BASE_Y + 0.075,
+          z: block.z,
+          width: edge,
+          height: 0.07,
+          depth: block.depth + edge,
+          color,
+        },
+      );
+    }
+    for (const envelope of plan.architecturalEnvelopes) {
+      if (!activeComponentIds.has(envelope.componentId)) continue;
+      const color =
+        assignmentByComponentId.get(envelope.componentId)?.accentColor ??
+        "#8be4cf";
+      const edge = 0.09;
+      const y = CAMPUS_BASE_Y + envelope.height + 0.1;
+      geometry.selection.push(
+        {
+          x: envelope.x,
+          y,
+          z: envelope.z - envelope.depth * 0.44,
+          width: envelope.width * 0.86,
+          height: 0.08,
+          depth: edge,
+          color,
+        },
+        {
+          x: envelope.x,
+          y,
+          z: envelope.z + envelope.depth * 0.44,
+          width: envelope.width * 0.86,
+          height: 0.08,
+          depth: edge,
+          color,
+        },
+        {
+          x: envelope.x - envelope.width * 0.44,
+          y,
+          z: envelope.z,
+          width: edge,
+          height: 0.08,
+          depth: envelope.depth * 0.86,
+          color,
+        },
+        {
+          x: envelope.x + envelope.width * 0.44,
+          y,
+          z: envelope.z,
+          width: edge,
+          height: 0.08,
+          depth: envelope.depth * 0.86,
+          color,
+        },
+      );
+    }
+  }
+  return geometry;
+}
+
+function UrbanBuildingHitTargets({
+  plan,
+  reservedEntityIds,
+  onHoverEntity,
+  onSelectEntity,
+}: {
+  plan: UrbanFabricPlan;
+  reservedEntityIds: ReadonlySet<string>;
+  onHoverEntity?: (entityId: string | null) => void;
+  onSelectEntity?: (entityId: string) => void;
+}) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const semanticBuildingById = useMemo(
+    () => new Map(plan.buildings.map((building) => [building.id, building])),
+    [plan.buildings],
+  );
+  const interactiveBuildings = useMemo(
+    () =>
+      plan.architecturalEnvelopes.filter((envelope) => {
+        const semantic = semanticBuildingById.get(envelope.semanticBuildingId);
+        return !semantic?.entityIds.some((id) => reservedEntityIds.has(id));
+      }),
+    [plan.architecturalEnvelopes, reservedEntityIds, semanticBuildingById],
+  );
+  const primaryEntityIdFor = (envelope: UrbanArchitecturalEnvelope) =>
+    semanticBuildingById.get(envelope.semanticBuildingId)?.primaryEntityId;
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    interactiveBuildings.forEach((building, index) => {
+      dummy.position.set(
+        building.x,
+        CAMPUS_BASE_Y + building.height / 2,
+        building.z,
+      );
+      dummy.rotation.set(0, building.rotation, 0);
+      dummy.scale.set(building.width, building.height, building.depth);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [dummy, interactiveBuildings]);
+  const entityIdAt = (instanceId: number | undefined) =>
+    instanceId === undefined
+      ? undefined
+      : interactiveBuildings[instanceId]
+        ? primaryEntityIdFor(interactiveBuildings[instanceId]!)
+        : undefined;
+  if (interactiveBuildings.length === 0) return null;
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, interactiveBuildings.length]}
+      name="urban-building-hit-targets"
+      onClick={(event) => {
+        const entityId = entityIdAt(event.instanceId);
+        if (!entityId) return;
+        event.stopPropagation();
+        onSelectEntity?.(entityId);
+      }}
+      onDoubleClick={(event) => {
+        const entityId = entityIdAt(event.instanceId);
+        if (!entityId) return;
+        event.stopPropagation();
+        onSelectEntity?.(entityId);
+      }}
+      onPointerOut={(event) => {
+        event.stopPropagation();
+        onHoverEntity?.(null);
+      }}
+      onPointerOver={(event) => {
+        const entityId = entityIdAt(event.instanceId);
+        if (!entityId) return;
+        event.stopPropagation();
+        onHoverEntity?.(entityId);
+      }}
+    >
+      <boxGeometry args={[1, 1, 1]} />
+      <meshBasicMaterial
+        color="#ffffff"
+        depthWrite={false}
+        opacity={0.001}
+        transparent
+      />
+    </instancedMesh>
+  );
+}
+
 function makeCampusGeometry(
   campuses: readonly SemanticCampus[],
   reservedEntityIds: ReadonlySet<string>,
@@ -847,6 +2195,7 @@ function makeCampusGeometry(
     accents: [],
     details: [],
     cylinders: [],
+    selection: [],
   };
 
   for (const campus of campuses) {
@@ -2293,6 +3642,7 @@ function nearestDistanceIndex(
 function makeGreenGeometry(
   plan: SemanticCityPlan,
   roadSamples: readonly RoadSurfaceSample[],
+  excludeBounds?: { minX: number; maxX: number; minZ: number; maxZ: number },
 ) {
   const trunks: CylinderInstance[] = [];
   const crowns: BoxInstance[] = [];
@@ -2417,6 +3767,13 @@ function makeGreenGeometry(
         if (pointIsInWater(plan.terrain.waterBoundaries, x, z)) {
           continue;
         }
+        if (
+          excludeBounds &&
+          x >= excludeBounds.minX &&
+          x <= excludeBounds.maxX &&
+          z >= excludeBounds.minZ &&
+          z <= excludeBounds.maxZ
+        ) continue;
         const seed = stableCityHash(
           `${plan.seed}:${road.id}:avenue-tree:${treeIndex}:${side}`,
         );
@@ -2471,6 +3828,13 @@ function makeGreenGeometry(
           THREE.MathUtils.lerp(start.z, end.z, progress) +
           nz * (road.width / 2 + 0.48) * side;
         if (pointIsInWater(plan.terrain.waterBoundaries, x, z)) continue;
+        if (
+          excludeBounds &&
+          x >= excludeBounds.minX &&
+          x <= excludeBounds.maxX &&
+          z >= excludeBounds.minZ &&
+          z <= excludeBounds.maxZ
+        ) continue;
         lightPoles.push({
           x,
           y: CAMPUS_BASE_Y + 0.78,
@@ -3077,16 +4441,24 @@ function StaticBoxInstances({
   roughness = 0.8,
   castShadow = false,
   receiveShadow = false,
+  opacity = 1,
+  transparent = false,
+  map,
+  envMap,
 }: {
   boxes: readonly BoxInstance[];
   color: string;
-  material: "basic" | "standard";
+  material: "basic" | "standard" | "physical";
   emissive?: string;
   emissiveIntensity?: number;
   metalness?: number;
   roughness?: number;
   castShadow?: boolean;
   receiveShadow?: boolean;
+  opacity?: number;
+  transparent?: boolean;
+  map?: THREE.Texture;
+  envMap?: THREE.Texture;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const dummy = useMemo(() => new THREE.Object3D(), []);
@@ -3128,7 +4500,22 @@ function StaticBoxInstances({
       {material === "basic" ? (
         <meshBasicMaterial
           color={usesInstanceColors ? "#ffffff" : color}
+          depthWrite={!transparent}
+          opacity={opacity}
           toneMapped={false}
+          transparent={transparent}
+        />
+      ) : material === "physical" ? (
+        <meshPhysicalMaterial
+          clearcoat={0.72}
+          clearcoatRoughness={0.16}
+          color={usesInstanceColors ? "#ffffff" : color}
+          envMap={envMap}
+          envMapIntensity={1.25}
+          metalness={metalness}
+          opacity={opacity}
+          roughness={roughness}
+          transparent={transparent}
         />
       ) : (
         <meshStandardMaterial
@@ -3137,6 +4524,9 @@ function StaticBoxInstances({
           emissiveIntensity={emissiveIntensity}
           metalness={metalness}
           roughness={roughness}
+          opacity={opacity}
+          map={map}
+          transparent={transparent}
         />
       )}
     </instancedMesh>

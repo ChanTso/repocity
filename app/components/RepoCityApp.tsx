@@ -67,6 +67,8 @@ import { planLivingCity } from "../lib/living-city";
 import { planSemanticCity } from "../lib/semantic-city";
 import { projectSemanticFlow } from "../lib/semantic-flow";
 import { planFlowSimulation } from "../lib/flow-simulation";
+import { planUrbanFabric } from "../lib/urban-fabric";
+import { planVisualCity } from "../lib/visual-city";
 import { resolveViewerReplayFrame } from "../lib/viewer-replay";
 
 type Mode = "explore" | "journey" | "replay";
@@ -591,7 +593,7 @@ function Inspector({
 export function RepoCityApp() {
   const [project, setProject] = useState<ViewerProject>(demoProject);
   const initialEntity = findInitialEntity(demoProject.entities);
-  const [mode, setMode] = useState<Mode>("journey");
+  const [mode, setMode] = useState<Mode>("explore");
   const [commitIndex, setCommitIndex] = useState(
     demoProject.commits.length - 1,
   );
@@ -673,6 +675,14 @@ export function RepoCityApp() {
         boundaryFacts,
       }),
     [boundaryFacts, flowEntities, flowRelations, livingCityPlan],
+  );
+  const urbanFabricPlan = useMemo(
+    () => planUrbanFabric({ semanticPlan: semanticCityPlan }),
+    [semanticCityPlan],
+  );
+  const visualCityPlan = useMemo(
+    () => planVisualCity({ semanticPlan: semanticCityPlan, urbanFabric: urbanFabricPlan }),
+    [semanticCityPlan, urbanFabricPlan],
   );
   const cityCapabilities = useMemo(() => {
     return {
@@ -1524,6 +1534,8 @@ export function RepoCityApp() {
           <CityScene
             cityPlan={livingCityPlan}
             semanticCityPlan={semanticCityPlan}
+            urbanFabricPlan={urbanFabricPlan}
+            visualCityPlan={visualCityPlan}
             semanticFlowProjection={semanticFlowProjection}
             entities={entities}
             relations={relations}
@@ -1627,7 +1639,7 @@ export function RepoCityApp() {
                   ? semanticCityPlan.components.length
                   : visibleDistrictIds.size}
               </strong>
-              <span>{mode === "journey" ? "职责园区" : "城区"}</span>
+              <span>{mode === "journey" ? "语义组件" : "城区"}</span>
             </div>
             <div>
               <strong>{metric(replayFrame.activeRelationIds.size)}</strong>
