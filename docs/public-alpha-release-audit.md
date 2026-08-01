@@ -16,7 +16,7 @@ This document records the release-candidate checks performed before owner approv
 | Public screenshots | Pass | Four authentic 1920×1080 product captures; hashes and states are recorded in `docs/media/README.md`. |
 | Social preview | Pass | 1280×640, 997,066-byte PNG based on the authentic hero capture; no claim that it is an additional product view. |
 | License | Pass pending owner publication decision | Apache-2.0 is installed for project source and original assets. Dependency licenses and exceptional families are recorded in `THIRD_PARTY_NOTICES.md`. |
-| Quality gate | Pending final clean-clone record | CI, lint, typecheck, tests, production build, rendered HTML, and clean checkout must all pass on the final commit. |
+| Quality gate | Pass | Local and isolated clean-clone `npm ci` / `npm run check` passed; GitHub Actions `Release gate` passed. |
 
 ## Known non-blocking warnings
 
@@ -29,7 +29,7 @@ This document records the release-candidate checks performed before owner approv
 
 After reviewing the final `PUBLIC_READY` report, the owner may authorize these separate steps:
 
-1. mark the release PR ready and merge it;
+1. merge the ready-for-review release PR;
 2. create the `v0.1.0-alpha.1` prerelease;
 3. verify branch/ruleset protection and required checks;
 4. deploy or update any hosted site if desired;
@@ -37,3 +37,5 @@ After reviewing the final `PUBLIC_READY` report, the owner may authorize these s
 6. verify an anonymous clone, README images, Quick Start, social preview, issues, security reporting, and rules after the visibility change.
 
 Changing visibility is intentionally not part of the release-candidate preparation commit.
+
+The current private repository cannot enable GitHub branch protection on its account tier: the Branch Protection API returns `403` and requires GitHub Pro or a public repository. The owner must enable protection immediately after publication (or upgrade before publication), require the `Release gate` check, require pull requests, and prohibit force pushes and branch deletion.
