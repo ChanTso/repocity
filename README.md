@@ -8,7 +8,7 @@ Navigate components, modules, files, symbols, dependencies, Git history, and evi
 
 [![CI](https://github.com/ChanTso/repocity/actions/workflows/ci.yml/badge.svg)](https://github.com/ChanTso/repocity/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-[![Status](https://img.shields.io/badge/status-v0.1.0--alpha.1-f59e0b.svg)](CHANGELOG.md)
+[![Status](https://img.shields.io/badge/status-v0.1.0--alpha.2-f59e0b.svg)](CHANGELOG.md)
 
 </div>
 
@@ -159,4 +159,4 @@ RepoCity source and original city-kit assets are licensed under [Apache License 
 
 ## Status
 
-The current release is **RepoCity v0.1.0-alpha.1 — Public Semantic City Prototype**. The roadmap is intentionally open-ended; no further release cadence is promised. See [CHANGELOG.md](CHANGELOG.md).
+The current release is **RepoCity v0.1.0-alpha.2 — Public Semantic City Prototype**. The roadmap is intentionally open-ended; no further release cadence is promised. See [CHANGELOG.md](CHANGELOG.md).

@@ -6,6 +6,14 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 
 - No committed post-alpha roadmap or release schedule.
 
+## [0.1.0-alpha.2] — 2026-08-02
+
+### Fixed
+
+- Prevented Three.js client modules from executing in the Cloudflare Worker global scope, eliminating the production `Error 1101` startup failure.
+- Added a lightweight, accessible loading shell while the interactive city initializes in the browser.
+- Updated production rendering tests to enforce the server/client WebGL boundary.
+
 ## [0.1.0-alpha.1] — 2026-08-01
 
 ### Added
