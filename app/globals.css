@@ -38,6 +38,83 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.repo-loading {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  width: 100vw;
+  height: 100dvh;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(65, 177, 151, 0.14), transparent 25%),
+    #071416;
+  text-align: center;
+}
+
+.repo-loading__mark {
+  display: flex;
+  align-items: end;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 18px;
+  padding: 10px;
+  border: 1px solid rgba(114, 224, 193, 0.25);
+  border-radius: 13px;
+  background: rgba(14, 43, 40, 0.72);
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.28);
+  gap: 4px;
+}
+
+.repo-loading__mark span {
+  width: 7px;
+  border-radius: 2px 2px 0 0;
+  background: var(--mint);
+  animation: repo-loading-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.repo-loading__mark span:nth-child(1) {
+  height: 14px;
+}
+
+.repo-loading__mark span:nth-child(2) {
+  height: 26px;
+  animation-delay: 0.18s;
+}
+
+.repo-loading__mark span:nth-child(3) {
+  height: 20px;
+  animation-delay: 0.36s;
+}
+
+.repo-loading h1 {
+  margin: 7px 0 8px;
+  font-size: 25px;
+  letter-spacing: -0.03em;
+}
+
+.repo-loading > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@keyframes repo-loading-pulse {
+  from {
+    opacity: 0.42;
+    transform: scaleY(0.72);
+  }
+
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .repo-loading__mark span {
+    animation: none;
+  }
+}
+
 button,
 input {
   color: inherit;

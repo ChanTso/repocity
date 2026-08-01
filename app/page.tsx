@@ -1,5 +1,5 @@
-import { RepoCityApp } from "./components/RepoCityApp";
+import { RepoCityClient } from "./components/RepoCityClient";
 
 export default function Home() {
-  return <RepoCityApp />;
+  return <RepoCityClient />;
 }
