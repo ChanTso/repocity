@@ -8,7 +8,7 @@ This document records the release-candidate checks performed before owner approv
 
 | Area | Result | Evidence |
 | --- | --- | --- |
-| Complete Git history | Pass | Gitleaks scanned all 18 pre-release commits with redaction and found no secrets. Deterministic history searches found only `localhost` development values and `@repocity.local` fixtures. |
+| Complete Git history | **Blocked** | Gitleaks found no secrets, but 17 pre-existing commits use `zhuochen@Zhuos-MacBook-Pro.local` as author and committer metadata. Every current remote branch reaches one or more affected commits. |
 | Risky files | Pass | No committed `.env`, private key, certificate, token file, or local absolute path. |
 | GitHub Actions history | Pass | No prior workflow runs and no artifacts existed while the repository was private. |
 | Dependency graph | Pass | Initial audit: 15 findings (13 high, 2 low). Patched framework/build dependencies and constrained vulnerable transitive packages. Final `npm audit`: 0 findings. |
@@ -25,9 +25,20 @@ This document records the release-candidate checks performed before owner approv
 - Performance varies by browser, GPU, dataset size, and device-pixel ratio; the project does not publish a universal FPS claim.
 - The visual renderer remains an alpha: the hero slice has the most detail and outer districts use simplified geometry.
 
+## Publication blocker: machine-local commit identity
+
+The release candidate itself uses the authenticated GitHub noreply identity, but older reachable commits expose a machine-specific `.local` hostname in Git author and committer metadata. Removing it from `HEAD` or adding `.mailmap` would not remove the raw metadata.
+
+The owner must choose one of these corrective paths before publication:
+
+1. rewrite all affected refs with `git filter-repo` and a mailmap, force-push with leases, then ask GitHub Support about purging cached unreachable commits and PR refs; or
+2. keep this repository private and publish a new repository from a sanitized/squashed history, preserving the existing development and PR history privately.
+
+The second option is safer and simpler when historical PR preservation matters. Neither option is authorized by release preparation alone.
+
 ## Owner-only publication gate
 
-After reviewing the final `PUBLIC_READY` report, the owner may authorize these separate steps:
+After resolving the history blocker and reviewing a new `PUBLIC_READY` report, the owner may authorize these separate steps:
 
 1. merge the ready-for-review release PR;
 2. create the `v0.1.0-alpha.1` prerelease;
