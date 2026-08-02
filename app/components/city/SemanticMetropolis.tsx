@@ -15,6 +15,11 @@ import type {
   AmbientAgentPlan,
   AmbientMobilityPlan,
 } from "@/app/lib/ambient-mobility";
+import {
+  prepareAmbientMotionRoute,
+  sampleAmbientAgentInto,
+  type PreparedAmbientMotionRoute,
+} from "@/app/lib/ambient-motion";
 import type { CityPoint } from "@/app/lib/living-city";
 import type {
   UrbanArchitecturalEnvelope,
@@ -133,11 +138,9 @@ interface MetropolisDisplayBounds {
 
 interface PreparedMotionRoute {
   id: string;
-  curve: THREE.CurvePath<THREE.Vector3>;
-  closed: boolean;
-  length: number;
-  cycleDistance: number;
-  stopDistances: number[];
+  motion: PreparedAmbientMotionRoute;
+  surfaceY: "water" | "road" | "ground";
+  roadSamples: readonly RoadSurfaceSample[];
 }
 
 interface MotionAgent {
@@ -4041,40 +4044,19 @@ function makeMotionAgents(
   const preparedRoutes = new Map<string, PreparedMotionRoute>();
   for (const route of routes) {
     if (route.points.length < 2) continue;
-    const routePoints: THREE.Vector3[] = [];
-    for (const point of route.points) {
-      const routePoint = new THREE.Vector3(
-        point.x,
-        route.kind === "water"
-          ? WATER_Y + 0.13
-          : route.kind === "pedestrian"
-            ? point.surface === "bridge-walk"
-              ? nearestRoadSurfaceY(point.x, point.z, roadSamples) + 0.06
-              : CAMPUS_BASE_Y + 0.02
-            : nearestRoadSurfaceY(point.x, point.z, roadSamples),
-        point.z,
-      );
-      const previous = routePoints.at(-1);
-      if (previous && previous.distanceToSquared(routePoint) < 0.000001) {
-        continue;
-      }
-      routePoints.push(routePoint);
-    }
-    if (routePoints.length < 2) continue;
-    const curve = makeSegmentedMotionCurve(routePoints);
-    const stopDistances = route.closed
-      ? [...route.stopProgresses]
-      : [
-          ...route.stopProgresses,
-          ...route.stopProgresses.map((progress) => 2 - progress),
-        ].sort((left, right) => left - right);
+    const motion = prepareAmbientMotionRoute(route);
+    if (!motion) continue;
     preparedRoutes.set(route.id, {
       id: route.id,
-      curve,
-      closed: route.closed,
-      length: Math.max(0.01, curve.getLength()),
-      cycleDistance: route.closed ? 1 : 2,
-      stopDistances,
+      motion,
+      surfaceY:
+        route.kind === "water"
+          ? "water"
+          : route.kind === "road" ||
+              route.points.some((candidate) => candidate.surface === "bridge-walk")
+            ? "road"
+            : "ground",
+      roadSamples,
     });
   }
   return plan.agents.flatMap((agent) => {
@@ -4098,25 +4080,6 @@ function makeMotionAgents(
       },
     ];
   });
-}
-
-/**
- * Motion follows the semantic polyline exactly. Catmull-Rom interpolation
- * rounds corners outside narrow roads, so every adjacent pair is a LineCurve3.
- */
-function makeSegmentedMotionCurve(
-  points: readonly THREE.Vector3[],
-): THREE.CurvePath<THREE.Vector3> {
-  const path = new THREE.CurvePath<THREE.Vector3>();
-  for (let index = 1; index < points.length; index += 1) {
-    path.add(
-      new THREE.LineCurve3(
-        points[index - 1]!.clone(),
-        points[index]!.clone(),
-      ),
-    );
-  }
-  return path;
 }
 
 function agentColor(mode: MobilityMode, variant: number): string {
@@ -4562,45 +4525,24 @@ function sampleMotionAgent(
   positionTarget: THREE.Vector3,
   tangentTarget: THREE.Vector3,
 ) {
-  const route = agent.route;
-  const travelDuration = route.cycleDistance / Math.max(0.0001, agent.speed);
-  const totalDuration =
-    travelDuration + route.stopDistances.length * agent.dwellSeconds;
-  let cycleTime =
-    (elapsed + agent.delay + agent.phase * totalDuration) % totalDuration;
-  if (cycleTime < 0) cycleTime += totalDuration;
-  let previousDistance = 0;
-  let distance = route.cycleDistance;
-  for (const stopDistance of route.stopDistances) {
-    const segmentDuration =
-      (stopDistance - previousDistance) / Math.max(0.0001, agent.speed);
-    if (cycleTime <= segmentDuration) {
-      distance = previousDistance + cycleTime * agent.speed;
-      break;
-    }
-    cycleTime -= segmentDuration;
-    if (cycleTime <= agent.dwellSeconds) {
-      distance = stopDistance;
-      break;
-    }
-    cycleTime -= agent.dwellSeconds;
-    previousDistance = stopDistance;
-  }
-  if (distance === route.cycleDistance && previousDistance < route.cycleDistance) {
-    distance = Math.min(
-      route.cycleDistance,
-      previousDistance + cycleTime * agent.speed,
-    );
-  }
-  const progress = route.closed
-    ? distance % 1
-    : distance <= 1
-      ? distance
-      : 2 - distance;
-  const direction = route.closed || distance <= 1 ? 1 : -1;
-  agent.route.curve.getPointAt(progress, positionTarget);
-  agent.route.curve.getTangentAt(progress, tangentTarget);
-  tangentTarget.multiplyScalar(direction).normalize();
+  sampleAmbientAgentInto(
+    agent.route.motion,
+    agent,
+    elapsed,
+    positionTarget,
+    tangentTarget,
+  );
+  positionTarget.y =
+    agent.route.surfaceY === "water"
+      ? WATER_Y + 0.13
+      : agent.route.surfaceY === "road"
+        ? nearestRoadSurfaceY(
+            positionTarget.x,
+            positionTarget.z,
+            agent.route.roadSamples,
+          ) + (agent.mode === "pedestrian" ? 0.06 : 0)
+        : CAMPUS_BASE_Y + 0.02;
+  tangentTarget.y = 0;
 }
 
 function StaticBoxInstances({

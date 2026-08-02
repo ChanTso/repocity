@@ -49,6 +49,7 @@ import {
   type PlannedBuilding,
 } from "@/app/lib/living-city";
 import type { AmbientMobilityPlan } from "@/app/lib/ambient-mobility";
+import { sceneMotionDiagnostics } from "@/app/lib/scene-motion-diagnostics";
 import type { SemanticFlowProjection } from "@/app/lib/semantic-flow";
 import type { SemanticCityPlan } from "@/app/lib/semantic-city";
 import type {
@@ -230,6 +231,11 @@ export function CityScene({
     controlledSelectedEntityId === undefined
       ? localSelectedEntityId
       : controlledSelectedEntityId;
+  const motionDiagnostics = sceneMotionDiagnostics(
+    ambientMobilityPlan,
+    flowJourney,
+    { showTraffic, showPedestrians, showWaterTraffic },
+  );
 
   const plan = useMemo(
     () =>
@@ -385,12 +391,17 @@ export function CityScene({
       aria-label={ariaLabel}
       className={className}
       data-ambient-playing={ambientPlaying ? "true" : "false"}
-      data-ambient-vehicle-count={ambientMobilityPlan?.diagnostics.vehicleCount ?? 0}
-      data-ambient-pedestrian-count={ambientMobilityPlan?.diagnostics.pedestrianCount ?? 0}
-      data-ambient-boat-count={ambientMobilityPlan?.diagnostics.boatCount ?? 0}
+      data-ambient-count-semantics="planned"
+      data-ambient-vehicle-count={motionDiagnostics.plannedVehicleCount}
+      data-ambient-pedestrian-count={motionDiagnostics.plannedPedestrianCount}
+      data-ambient-boat-count={motionDiagnostics.plannedBoatCount}
+      data-ambient-enabled-vehicle-count={motionDiagnostics.enabledVehicleCount}
+      data-ambient-enabled-pedestrian-count={motionDiagnostics.enabledPedestrianCount}
+      data-ambient-enabled-boat-count={motionDiagnostics.enabledBoatCount}
+      data-ambient-visible-count-measured="false"
       data-ambient-planning-ms={ambientPlanningMs.toFixed(3)}
       data-evidence-playing={flowPlaying ? "true" : "false"}
-      data-evidence-token-count={flowJourney ? 1 : 0}
+      data-evidence-token-count={motionDiagnostics.evidenceTokenCount}
       data-mode-camera-policy="preserve"
       onPointerLeave={() => hoverEntity(null)}
       role="region"
