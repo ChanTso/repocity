@@ -5,7 +5,6 @@ import { planSemanticCity } from "./semantic-city";
 import {
   isSemanticSelectableKind,
   resolveAmbientPresentation,
-  resolveAmbientMobilityRoutes,
   resolveBuildingSelection,
   resolveComponentSelection,
   resolveLayerPlayback,
@@ -21,7 +20,6 @@ import {
   type CityMode,
 } from "./semantic-lens";
 import { planUrbanFabric } from "./urban-fabric";
-import { planVisualCity } from "./visual-city";
 
 const city = planLivingCity(demoProject);
 const semantic = planSemanticCity({
@@ -31,7 +29,6 @@ const semantic = planSemanticCity({
   boundaryFacts: demoProject.boundaryFacts,
 });
 const fabric = planUrbanFabric({ semanticPlan: semantic });
-const visual = planVisualCity({ semanticPlan: semantic, urbanFabric: fabric });
 const entity = demoProject.entities.find((candidate) => candidate.exportNames.length > 0)!;
 
 describe("semantic lens", () => {
@@ -89,16 +86,6 @@ describe("semantic lens", () => {
         }),
       ).toMatchObject({ traffic: false, pedestrians: false, waterTraffic: false });
     }
-  });
-
-  it("derives one non-evidentiary ambient cohort without duplicating journey data", () => {
-    const routes = resolveAmbientMobilityRoutes(fabric, visual);
-    expect(routes.length).toBeGreaterThan(0);
-    expect(new Set(routes.map((route) => route.id)).size).toBe(routes.length);
-    expect(routes.some((route) => route.mode === "car")).toBe(true);
-    expect(routes.some((route) => route.mode === "pedestrian")).toBe(true);
-    expect(routes.some((route) => route.mode === "boat")).toBe(true);
-    expect(routes.every((route) => route.evidenceRelationIds.length === 0)).toBe(true);
   });
 
   it("never classifies decorative or ambient context as semantic selection", () => {

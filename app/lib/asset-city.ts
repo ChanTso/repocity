@@ -525,7 +525,7 @@ export function makeAssetReviewCameraPresets(
   return [
     { id: "street-corner", key: "1", position: [masonry.x + 4.8, 3.3, masonry.z + 8.5], target: [masonry.x - masonry.width * 0.18, 1.5, masonry.z + masonry.depth * 0.34], fov: 42 },
     { id: "storefront-street", key: "2", position: [masonry.x + 4.2, 2.75, masonry.z + 8.2], target: [masonry.x - masonry.width * 0.18, 1.25, masonry.z + masonry.depth * 0.34], fov: 42 },
-    { id: "river-bridge", key: "3", position: [visualCity.river.minX - 1.55, 2.15, bridge.z + 15.8], target: [(visualCity.river.minX + visualCity.river.maxX) / 2, 0.9, bridge.z - 0.8], fov: 42 },
+    { id: "river-bridge", key: "3", position: [visualCity.river.minX - 1.55, 5.2, bridge.z + 17.2], target: [(visualCity.river.minX + visualCity.river.maxX) / 2, 0.65, bridge.z - 0.8], fov: 42 },
     { id: "glass-facade", key: "4", position: [glass.x + 16, 5.5, glass.z + 10], target: [glass.x, glass.height * 0.4, glass.z], fov: 42 },
     { id: "urban-composition", key: "5", position: [center.x - 15.5, 9, center.z + 14.5], target: [center.x, 3.1, center.z], fov: 42 },
     { id: "public-alpha-hero", key: "6", position: [visualCity.river.maxX + 55, 30, bridge.z + 35], target: [center.x + 12, 2.8, center.z + 8], fov: 42 },

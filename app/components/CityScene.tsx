@@ -48,11 +48,9 @@ import {
   type LivingCityPlan,
   type PlannedBuilding,
 } from "@/app/lib/living-city";
+import type { AmbientMobilityPlan } from "@/app/lib/ambient-mobility";
 import type { SemanticFlowProjection } from "@/app/lib/semantic-flow";
-import type {
-  SemanticCityPlan,
-  SemanticMobilityRoute,
-} from "@/app/lib/semantic-city";
+import type { SemanticCityPlan } from "@/app/lib/semantic-city";
 import type {
   CityVisualProfile,
   SemanticLabel,
@@ -134,7 +132,8 @@ export interface CitySceneProps {
   semanticProfile?: CityVisualProfile;
   semanticLabels?: readonly SemanticLabel[];
   semanticRelations?: readonly SemanticRelationOverlay[];
-  ambientMobilityRoutes?: readonly SemanticMobilityRoute[];
+  ambientMobilityPlan?: AmbientMobilityPlan | null;
+  ambientPlanningMs?: number;
   /** Independent ambient-city playback; evidence playback is flowPlaying. */
   ambientPlaying?: boolean;
   /** Explicit camera action. Mode switches themselves preserve camera state. */
@@ -198,7 +197,8 @@ export function CityScene({
   semanticProfile,
   semanticLabels = [],
   semanticRelations = [],
-  ambientMobilityRoutes = [],
+  ambientMobilityPlan = null,
+  ambientPlanningMs = 0,
   ambientPlaying = true,
   cameraPresetRequest = null,
   selectedComponentId = null,
@@ -385,7 +385,12 @@ export function CityScene({
       aria-label={ariaLabel}
       className={className}
       data-ambient-playing={ambientPlaying ? "true" : "false"}
+      data-ambient-vehicle-count={ambientMobilityPlan?.diagnostics.vehicleCount ?? 0}
+      data-ambient-pedestrian-count={ambientMobilityPlan?.diagnostics.pedestrianCount ?? 0}
+      data-ambient-boat-count={ambientMobilityPlan?.diagnostics.boatCount ?? 0}
+      data-ambient-planning-ms={ambientPlanningMs.toFixed(3)}
       data-evidence-playing={flowPlaying ? "true" : "false"}
+      data-evidence-token-count={flowJourney ? 1 : 0}
       data-mode-camera-policy="preserve"
       onPointerLeave={() => hoverEntity(null)}
       role="region"
@@ -453,7 +458,7 @@ export function CityScene({
           semanticLabels={semanticLabels}
           semanticProfile={semanticProfile}
           semanticRelations={semanticRelations}
-          ambientMobilityRoutes={ambientMobilityRoutes}
+          ambientMobilityPlan={ambientMobilityPlan}
           ambientPlaying={ambientPlaying}
           cameraPresetRequest={cameraPresetRequest}
           selectedComponentId={selectedComponentId}
@@ -485,7 +490,7 @@ interface SceneContentsProps {
   semanticProfile?: CityVisualProfile;
   semanticLabels: readonly SemanticLabel[];
   semanticRelations: readonly SemanticRelationOverlay[];
-  ambientMobilityRoutes: readonly SemanticMobilityRoute[];
+  ambientMobilityPlan: AmbientMobilityPlan | null;
   ambientPlaying: boolean;
   cameraPresetRequest: {
     id: AssetReviewCameraId;
@@ -625,7 +630,7 @@ function SceneContents({
   semanticProfile,
   semanticLabels,
   semanticRelations,
-  ambientMobilityRoutes,
+  ambientMobilityPlan,
   ambientPlaying,
   cameraPresetRequest,
   selectedComponentId,
@@ -1018,7 +1023,7 @@ function SceneContents({
           // These urban-fabric routes are ambient city context. They are kept
           // visually subordinate to FlowJourneyLayer and never presented as
           // observed traffic or journey evidence.
-          mobilityRoutes={ambientMobilityRoutes}
+          mobilityPlan={ambientMobilityPlan}
           plan={semanticCityPlan}
           urbanFabric={urbanFabricPlan}
           visualCity={visualCityPlan}

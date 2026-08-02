@@ -6,14 +6,12 @@ import type {
 import type {
   SemanticCityPlan,
   SemanticComponent,
-  SemanticMobilityRoute,
 } from "./semantic-city";
 import type {
   UrbanBlock,
   UrbanBuildingEnvelope,
   UrbanFabricPlan,
 } from "./urban-fabric";
-import type { VisualCityPlan } from "./visual-city";
 
 export type CityMode = "explore" | "map" | "journey" | "replay";
 export type RelationDirection = "off" | "incoming" | "outgoing" | "both";
@@ -218,67 +216,6 @@ export function resolveLayerPlayback({
     ambientPlaying: true,
     evidenceJourneyPlaying: journeyPlaying,
   };
-}
-
-/**
- * Builds a small deterministic ambient cohort from the already-compiled urban
- * fabric. Empty evidence IDs are intentional: these routes express city scale,
- * never repository relationships, runtime telemetry or journey evidence.
- */
-export function resolveAmbientMobilityRoutes(
-  urbanFabric: UrbanFabricPlan,
-  visualCity: VisualCityPlan,
-): SemanticMobilityRoute[] {
-  const routes: SemanticMobilityRoute[] = [];
-  const vehicleModes = ["car", "car", "transit", "freight"] as const;
-  urbanFabric.streets
-    .filter(
-      (street) =>
-        street.level === "ground" &&
-        street.hierarchy !== "local" &&
-        street.centerline.length >= 2,
-    )
-    .sort((left, right) => left.id.localeCompare(right.id, "en"))
-    .slice(0, vehicleModes.length)
-    .forEach((street, index) => {
-      routes.push({
-        id: `ambient-context:${street.id}:${vehicleModes[index]}`,
-        mode: vehicleModes[index]!,
-        points: street.centerline.map((point) => ({ x: point.x, z: point.z })),
-        weight: index < 2 ? 3 : 2,
-        componentIds: [],
-        evidenceRelationIds: [],
-      });
-    });
-  urbanFabric.streets
-    .filter(
-      (street) =>
-        street.level === "ground" &&
-        street.hierarchy === "local" &&
-        street.centerline.length >= 2,
-    )
-    .sort((left, right) => left.id.localeCompare(right.id, "en"))
-    .slice(0, 3)
-    .forEach((street) => {
-      routes.push({
-        id: `ambient-context:${street.id}:pedestrian`,
-        mode: "pedestrian",
-        points: street.centerline.map((point) => ({ x: point.x, z: point.z })),
-        weight: 4,
-        componentIds: [],
-        evidenceRelationIds: [],
-      });
-    });
-  const river = visualCity.river;
-  routes.push({
-    id: "ambient-context:river:boat",
-    mode: "boat",
-    points: river.centerline.map((point) => ({ x: point.x, z: point.z })),
-    weight: 2,
-    componentIds: [],
-    evidenceRelationIds: [],
-  });
-  return routes.sort((left, right) => left.id.localeCompare(right.id, "en"));
 }
 
 export interface ResolvedComponentSelection {

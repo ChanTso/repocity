@@ -67,6 +67,11 @@ import {
   isRelationVisibleAtCommit,
 } from "../lib/city-visuals";
 import { planLivingCity } from "../lib/living-city";
+import {
+  measureAmbientMobilityPlan,
+  type AmbientPublicFrontage,
+} from "../lib/ambient-mobility";
+import { planAssetBackedHero } from "../lib/asset-city";
 import { planSemanticCity } from "../lib/semantic-city";
 import { projectSemanticFlow } from "../lib/semantic-flow";
 import { planFlowSimulation } from "../lib/flow-simulation";
@@ -75,7 +80,6 @@ import { planVisualCity } from "../lib/visual-city";
 import { resolveViewerReplayFrame } from "../lib/viewer-replay";
 import {
   resolveAmbientPresentation,
-  resolveAmbientMobilityRoutes,
   resolveComponentSelection,
   resolveLayerPlayback,
   resolveModeVisualProfile,
@@ -869,9 +873,68 @@ export function RepoCityApp() {
     () => planVisualCity({ semanticPlan: semanticCityPlan, urbanFabric: urbanFabricPlan }),
     [semanticCityPlan, urbanFabricPlan],
   );
-  const ambientMobilityRoutes = useMemo(
-    () => resolveAmbientMobilityRoutes(urbanFabricPlan, visualCityPlan),
+  const assetHeroPlan = useMemo(
+    () => planAssetBackedHero(urbanFabricPlan, visualCityPlan),
     [urbanFabricPlan, visualCityPlan],
+  );
+  const ambientPublicFrontages = useMemo<readonly AmbientPublicFrontage[]>(
+    () =>
+      assetHeroPlan.buildings.map((building) => {
+        const programs = assetHeroPlan.streetPrograms
+          .filter(
+            (program) => program.ownerBuildingId === building.semanticBuildingId,
+          )
+          .sort((left, right) => {
+            const tangentX = Math.cos(building.rotation);
+            const tangentZ = -Math.sin(building.rotation);
+            return (
+              left.x * tangentX + left.z * tangentZ -
+              (right.x * tangentX + right.z * tangentZ)
+            );
+          });
+        const forwardX = Math.sin(building.rotation);
+        const forwardZ = Math.cos(building.rotation);
+        const tangentX = Math.cos(building.rotation);
+        const tangentZ = -Math.sin(building.rotation);
+        const edgePadding = Math.max(0.42, building.width * 0.08);
+        const entrancePoints = programs.map((program) => ({
+          x: program.x + forwardX * 0.42,
+          z: program.z + forwardZ * 0.42,
+        }));
+        const first = entrancePoints[0] ?? { x: building.x, z: building.z };
+        const last = entrancePoints.at(-1) ?? first;
+        const envelope = urbanFabricPlan.architecturalEnvelopes.find(
+          (candidate) => candidate.id === building.envelopeId,
+        );
+        return {
+          id: building.id,
+          envelopeId: building.envelopeId,
+          blockId: building.blockId,
+          streetId: envelope?.primaryStreetId ?? "visual-public-frontage",
+          points: [
+            {
+              x: first.x - tangentX * edgePadding,
+              z: first.z - tangentZ * edgePadding,
+            },
+            ...entrancePoints,
+            {
+              x: last.x + tangentX * edgePadding,
+              z: last.z + tangentZ * edgePadding,
+            },
+          ],
+          priority: building.node === "masonry-building",
+        };
+      }),
+    [assetHeroPlan, urbanFabricPlan.architecturalEnvelopes],
+  );
+  const measuredAmbientMobility = useMemo(
+    () =>
+      measureAmbientMobilityPlan({
+        urbanFabric: urbanFabricPlan,
+        visualCity: visualCityPlan,
+        publicFrontages: ambientPublicFrontages,
+      }),
+    [ambientPublicFrontages, urbanFabricPlan, visualCityPlan],
   );
   const cityCapabilities = useMemo(() => {
     return {
@@ -1978,7 +2041,8 @@ export function RepoCityApp() {
             urbanFabricPlan={urbanFabricPlan}
             visualCityPlan={visualCityPlan}
             semanticFlowProjection={semanticFlowProjection}
-            ambientMobilityRoutes={ambientMobilityRoutes}
+            ambientMobilityPlan={measuredAmbientMobility.plan}
+            ambientPlanningMs={measuredAmbientMobility.planningMs}
             entities={entities}
             relations={relations}
             districts={districts}
