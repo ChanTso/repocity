@@ -86,14 +86,16 @@ This PR does not add blocks, asset families, traffic density, journeys, telemetr
 ## Implemented Semantic Lens
 
 - `SemanticLensState` owns the four modes, typed selection, relationship direction, and label level.
-- `CityVisualProfile` centralizes architecture, ambient, semantic, relation, journey, and replay emphasis.
+- `CityVisualProfile` contains only consumed canvas, ambient, semantic-overlay, and relation controls. Whole-canvas brightness/saturation are named honestly because CSS cannot isolate city geometry from journey or replay geometry.
+- Component selection is a component scope: it clears any previous file child, renders a component-specific inspector, and never invents a representative file.
 - Map mode uses stable semantic and urban-fabric IDs to resolve component block unions, semantic building envelopes, architectural facade masses, entrances, and file addresses.
 - World-space semantic labels are memoized, deterministic, distance/selection culled, and capped at 12. Storefront and context names never enter the label or search selector.
 - Search results expose entity type, component, module group, path/export match, and semantic address, then enter Map and focus the visible semantic building.
 - The inspector separates repository ownership from deterministic placement in “为什么在这里？”.
 - Optional one-hop relation overlays are thin non-emissive dashed lines; their inspector card reports endpoints, type, clamped weight, repository provenance, and the non-telemetry contract.
-- A single deterministic ambient cohort is derived from compiled streets and river geometry. It has no evidence IDs and is passed to the existing instanced mobility renderer; mode profiles reduce opacity and speed without creating a second simulation.
+- A single deterministic ambient cohort is derived from compiled streets and river geometry. It has no evidence IDs and is passed to the existing instanced mobility renderer; mode profiles reduce opacity and speed without creating a second simulation. Its playback is independent from evidence-journey playback; reduced-motion explicitly freezes both.
 - Camera focus resolves the visible `UrbanBuildingEnvelope` before the legacy file coordinate.
+- Switching modes preserves camera position. Map overview is an explicit button/`6` preset rather than an automatic reset.
 
 ## Mode contract after implementation
 
@@ -146,11 +148,11 @@ All captures are authentic 1920×1080 local product screenshots. No generated im
 
 ## Acceptance status
 
-- `npm run check`: passed (lint, all workspace typechecks, workspace tests, 106 application tests across 11 files, production build, and 2 rendered-HTML tests).
-- Semantic Lens selector coverage: 14 tests covering mode transitions/profiles, ambient visibility/provenance, semantic exclusion, component/building/address/breadcrumb resolution, placement explanation, deterministic labels/cap, one-hop relationships, and semantic search.
+- `npm run check`: passed after the review-fix pass (lint, all workspace typechecks/tests, 109 application tests across 11 files, production build, and 2 rendered-HTML tests).
+- Semantic Lens selector coverage: 17 tests covering mode transitions/profiles, independent ambient/evidence playback, reduced motion, semantic exclusion, coherent component/file scope, component/building/address/breadcrumb resolution, placement explanation, selected-label priority/cap, one-hop relationships, and semantic search.
 - Existing flow-simulation journey invariants (14 tests) and viewer replay behavior (3 tests) passed unchanged in the repository-wide gate.
 - Production build: passed with the repository's existing non-blocking chunk-size and route-classification warnings.
-- Scripted browser walkthrough: passed for Map selection, file search/focus, breadcrumb, placement explanation, relationship evidence, Flow legend, and Replay selection.
+- Owner browser acceptance: recorded in [Semantic Lens usability](SEMANTIC_LENS_USABILITY.md), including component/file reconciliation, independent ambient playback, preserved camera context, layer toggles, and relation presentation.
 - First-time-user study: unverified because no independent participants were available; see [Semantic Lens usability](SEMANTIC_LENS_USABILITY.md).
 
 ## Known limitations
@@ -158,5 +160,5 @@ All captures are authentic 1920×1080 local product screenshots. No generated im
 - World-space label priority suppression is deterministic, but dense camera angles can still produce overlap.
 - The demo contains inferred and deterministic evidence, not observed runtime evidence.
 - Ambient agents establish context at the public-alpha camera but are intentionally subtle; density is not repository or runtime data.
-- Component-only selection keeps the file inspector empty until a building/file is selected.
+- Component-only selection uses a component-specific inspector until a building/file is selected.
 - This change does not extend repository language coverage, city blocks, architectural assets, interiors, journeys, or telemetry.

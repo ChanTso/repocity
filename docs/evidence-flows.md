@@ -19,6 +19,7 @@ The underlying design reserves separate categories for observed runtime, test, a
 - A visible route links to relationship or rule explanations.
 - Moving journey tokens are visually distinct from ambient vehicles and pedestrians.
 - Deterministic ambient vehicles, pedestrians, and boats remain visible at reduced emphasis in Flow and never receive evidence trails, station labels, or provenance interaction.
+- Pausing a journey freezes evidence tokens and route progression only; ambient agents continue at the Flow profile speed. `prefers-reduced-motion` explicitly freezes both motion layers.
 - A persistent `○ Ambient context / ◆ Evidence journey` key states the distinction without requiring settings.
 - Density, timing, and queues are explanatory simulation values unless explicitly documented otherwise.
 - Missing or unsupported evidence is shown as a limitation instead of being fabricated.

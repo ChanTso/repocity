@@ -28,6 +28,8 @@ repository facts
 
 Map selection resolves stable component, block, semantic-building, file, entrance, and address IDs. The breadcrumb renders only levels supported by those mappings. Repository facts decide ownership; deterministic planners decide physical placement; architectural subdivisions and decoration do not create repository entities.
 
+Component selection is a scope, not an implicit file choice. Selecting a component clears any file child from another component and shows aggregate component facts; RepoCity never fabricates a representative file. Selecting an actual file re-establishes the component → building → file chain in both breadcrumb and inspector.
+
 ## Stable identity
 
 Entity IDs are deterministic. Rename detection preserves identity; delete followed by a new add creates a new entity. Layout uses historical maximum metrics so replay changes state without moving the city.
