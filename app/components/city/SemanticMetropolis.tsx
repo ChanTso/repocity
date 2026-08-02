@@ -34,8 +34,11 @@ import type {
 } from "@/app/lib/visual-city";
 import { stableCityHash } from "@/app/lib/city-visuals";
 import { getTimeOfDayPalette } from "./living-city-render-utils";
-import { planAssetBackedHero } from "@/app/lib/asset-city";
-import { AssetBackedHero } from "./AssetBackedHero";
+import {
+  measureChicagoKitV2Plan,
+  type ChicagoKitV2Plan,
+} from "@/app/lib/chicago-kit-v2";
+import { ChicagoKitV2 } from "./ChicagoKitV2";
 
 const LAND_Y = 0;
 const ROAD_Y = 0.12;
@@ -208,7 +211,6 @@ export function SemanticMetropolis({
   showWaterTraffic = true,
   ambientOpacity = 1,
   ambientSpeedScale = 1,
-  selectedEntityId = null,
   playing = true,
   onHoverEntity,
   onSelectEntity,
@@ -217,16 +219,26 @@ export function SemanticMetropolis({
     () => getTimeOfDayPalette(timeOfDay),
     [timeOfDay],
   );
-  const assetBackedHero = useMemo(
+  const measuredChicagoKit = useMemo(
     () =>
       urbanFabric && visualCity
-        ? planAssetBackedHero(urbanFabric, visualCity)
+        ? measureChicagoKitV2Plan(urbanFabric, visualCity)
         : null,
     [urbanFabric, visualCity],
   );
+  const chicagoKit = measuredChicagoKit?.plan ?? null;
   const replacedEnvelopeIds = useMemo(
-    () => new Set(assetBackedHero?.replacedEnvelopeIds ?? []),
-    [assetBackedHero],
+    () => new Set(chicagoKit?.signatures.map((signature) => signature.envelopeId) ?? []),
+    [chicagoKit],
+  );
+  const hiddenSemanticBuildingIds = useMemo(
+    () =>
+      new Set(
+        [...reservedEntityIds]
+          .map((entityId) => urbanFabric?.entityAddresses[entityId]?.buildingId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [reservedEntityIds, urbanFabric],
   );
   const campusGeometry = useMemo(
     () =>
@@ -246,10 +258,10 @@ export function SemanticMetropolis({
   );
   const visualSliceGeometry = useMemo(
     () =>
-      visualCity && urbanFabric
+      visualCity && urbanFabric && !chicagoKit
         ? makeVisualSliceGeometry(visualCity, urbanFabric, replacedEnvelopeIds)
         : null,
-    [replacedEnvelopeIds, urbanFabric, visualCity],
+    [chicagoKit, replacedEnvelopeIds, urbanFabric, visualCity],
   );
   const roadGeometry = useMemo(
     () => makeRoadGeometry(urbanFabric?.streets ?? plan.roads),
@@ -313,7 +325,11 @@ export function SemanticMetropolis({
 
   return (
     <group name="semantic-metropolis">
-      <RenderDiagnostics urbanFabric={urbanFabric} />
+      <RenderDiagnostics
+        chicagoKit={chicagoKit}
+        chicagoKitPlanningMs={measuredChicagoKit?.planningMs ?? null}
+        urbanFabric={urbanFabric}
+      />
       <SemanticTerrain
         bounds={terrainBounds}
         waterBoundaries={displayWaterBoundaries}
@@ -327,15 +343,16 @@ export function SemanticMetropolis({
       {visualSliceGeometry ? (
         <VisualSliceInstances geometry={visualSliceGeometry} night={palette.night} />
       ) : null}
-      {assetBackedHero ? (
-        <AssetBackedHero
-          onHoverEntity={onHoverEntity}
-          onSelectEntity={onSelectEntity}
-          plan={assetBackedHero}
-          selectedEntityId={selectedEntityId}
+      {chicagoKit && urbanFabric && visualCity ? (
+        <ChicagoKitV2
+          hiddenSemanticBuildingIds={hiddenSemanticBuildingIds}
+          night={palette.night}
+          plan={chicagoKit}
+          urbanFabric={urbanFabric}
+          visualCity={visualCity}
         />
       ) : null}
-      {visualCity && urbanFabric && !assetBackedHero ? (
+      {visualCity && urbanFabric && !chicagoKit ? (
         <HeroStorefrontSigns plan={urbanFabric} visualCity={visualCity} />
       ) : null}
 
@@ -525,8 +542,12 @@ export function SemanticMetropolis({
 }
 
 function RenderDiagnostics({
+  chicagoKit,
+  chicagoKitPlanningMs,
   urbanFabric,
 }: {
+  chicagoKit: ChicagoKitV2Plan | null;
+  chicagoKitPlanningMs: number | null;
   urbanFabric?: UrbanFabricPlan;
 }) {
   const renderer = useThree((state) => state.gl);
@@ -549,8 +570,11 @@ function RenderDiagnostics({
       massingVolumes: urbanFabric?.morphology.massingVolumeCount ?? 0,
       storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
       facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
+      chicagoKitSignatures: chicagoKit?.signatures.length ?? 0,
+      chicagoKitContextSignatures: chicagoKit?.contextSignatures.length ?? 0,
+      chicagoKitPlanningMs,
     };
-  }, [renderer, urbanFabric]);
+  }, [chicagoKit, chicagoKitPlanningMs, renderer, urbanFabric]);
   useFrame((_state, delta) => {
     if (process.env.NODE_ENV !== "development") return;
     smoothedFrameMs.current =
@@ -570,6 +594,9 @@ function RenderDiagnostics({
       massingVolumes: urbanFabric?.morphology.massingVolumeCount ?? 0,
       storefronts: urbanFabric?.morphology.storefrontCount ?? 0,
       facadeInstances: urbanFabric?.morphology.facadeInstanceCount ?? 0,
+      chicagoKitSignatures: chicagoKit?.signatures.length ?? 0,
+      chicagoKitContextSignatures: chicagoKit?.contextSignatures.length ?? 0,
+      chicagoKitPlanningMs,
     };
     const output = outputRef.current;
     if (output) {
@@ -580,6 +607,9 @@ function RenderDiagnostics({
       output.dataset.programs = String(renderer.info.programs?.length ?? 0);
       output.dataset.frameMs = smoothedFrameMs.current.toFixed(2);
       output.dataset.fps = (1_000 / Math.max(0.01, smoothedFrameMs.current)).toFixed(1);
+      output.dataset.chicagoKitSignatures = String(chicagoKit?.signatures.length ?? 0);
+      output.dataset.chicagoKitContextSignatures = String(chicagoKit?.contextSignatures.length ?? 0);
+      output.dataset.chicagoKitPlanningMs = String(chicagoKitPlanningMs ?? 0);
     }
   });
   return (

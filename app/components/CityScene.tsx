@@ -1555,8 +1555,8 @@ function CameraRig({
     [urbanFabric, visualCity],
   );
   const reviewPresets = useMemo(
-    () => assetHero && visualCity ? makeAssetReviewCameraPresets(assetHero, visualCity) : [],
-    [assetHero, visualCity],
+    () => assetHero && visualCity ? makeAssetReviewCameraPresets(assetHero, visualCity, urbanFabric) : [],
+    [assetHero, urbanFabric, visualCity],
   );
   const applyVisualBookmark = useCallback(
     (bookmark: AssetReviewCameraId) => {
@@ -1750,6 +1750,8 @@ function CameraRig({
         "4": "glass-facade",
         "5": "urban-composition",
         "6": "public-alpha-hero",
+        "7": "civic-anchor",
+        "8": "riverfront-tower",
       } as const)[event.key];
       if (!bookmark) return;
       event.preventDefault();

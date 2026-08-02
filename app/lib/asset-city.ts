@@ -127,11 +127,13 @@ export type AssetReviewCameraId =
   | "river-bridge"
   | "glass-facade"
   | "urban-composition"
-  | "public-alpha-hero";
+  | "public-alpha-hero"
+  | "civic-anchor"
+  | "riverfront-tower";
 
 export interface AssetReviewCameraPreset {
   id: AssetReviewCameraId;
-  key: "1" | "2" | "3" | "4" | "5" | "6";
+  key: "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8";
   position: [number, number, number];
   target: [number, number, number];
   fov: number;
@@ -515,19 +517,59 @@ export function planAssetBackedHero(
 export function makeAssetReviewCameraPresets(
   plan: AssetBackedHeroPlan,
   visualCity: VisualCityPlan,
+  urbanFabric?: UrbanFabricPlan,
 ): readonly AssetReviewCameraPreset[] {
-  const masonry = plan.buildings.find((building) => building.node === "masonry-building") ?? plan.buildings[0]!;
-  const glass = plan.buildings.find((building) => building.node === "blue-unitized-tower") ?? plan.buildings[0]!;
   const center = plan.buildings.reduce((value, building) => ({ x: value.x + building.x, z: value.z + building.z }), { x: 0, z: 0 });
   center.x /= plan.buildings.length;
   center.z /= plan.buildings.length;
   const bridge = plan.riverEdge.find((item) => item.node === "bridge-abutment")!;
+  const fallbackFulton = visualCity.hero.blocks.find((block) => block.role === "fulton-brick-market-a")?.block ?? visualCity.hero.blocks[0]!.block;
+  const fallbackLoop = visualCity.hero.blocks.find((block) => block.role === "loop-masonry-streetwall")?.block ?? visualCity.hero.blocks[0]!.block;
+  const fallbackGlass = visualCity.hero.blocks.find((block) => block.role === "modern-glass-corner")?.block ?? visualCity.hero.blocks[0]!.block;
+  const fallbackCivic = visualCity.hero.blocks.find((block) => block.role === "civic-podium-tower")?.block ?? visualCity.hero.blocks.at(-1)!.block;
+  const envelope = (family: UrbanFabricPlan["architecturalEnvelopes"][number]["facadeFamily"], fallback: typeof fallbackFulton) =>
+    urbanFabric?.architecturalEnvelopes.find((candidate) => candidate.facadeFamily === family) ?? fallback;
+  const fulton = envelope("fulton-brick-warehouse", fallbackFulton);
+  const loop = envelope("chicago-school-masonry", fallbackLoop);
+  const glass = urbanFabric?.architecturalEnvelopes.find((candidate) => candidate.facadeFamily === "miesian-grid") ?? envelope("blue-green-curtain-wall", fallbackGlass);
+  const civic = envelope("civic-institutional", fallbackCivic);
+  const riverfront = envelope("riverfront-terrace", fallbackGlass);
+  const streetView = (
+    anchor: typeof fulton,
+    distance: number,
+    tangentOffset: number,
+    cameraY: number,
+    targetY: number,
+  ): { position: [number, number, number]; target: [number, number, number] } => {
+    const edge = "primaryEdge" in anchor ? anchor.primaryEdge : "south";
+    const normal = edge === "north" ? [0, -1] : edge === "south" ? [0, 1] : edge === "west" ? [-1, 0] : [1, 0];
+    const tangent = [-normal[1], normal[0]];
+    const extent = normal[0] === 0 ? anchor.depth / 2 : anchor.width / 2;
+    return {
+      position: [
+        anchor.x + normal[0] * (extent + distance) + tangent[0] * tangentOffset,
+        cameraY,
+        anchor.z + normal[1] * (extent + distance) + tangent[1] * tangentOffset,
+      ],
+      target: [anchor.x, targetY, anchor.z],
+    };
+  };
+  const loopView = streetView(loop, 12.5, loop.width * 1.35, 7.2, Math.min(4.2, "height" in loop ? loop.height * 0.36 : 3.2));
+  const fultonView = streetView(fulton, 11.5, -fulton.width * 1.3, 5.8, 2.8);
+  // The two downtown proofs use an elevated oblique so the subject clears the
+  // opposite street wall while its podium, corner treatment, and roof remain in
+  // one frame. The lower Fulton/Loop presets retain pedestrian eye level.
+  const glassView = streetView(glass, 25, 20, 18, Math.min(7.2, "height" in glass ? glass.height * 0.42 : 5.8));
+  const civicView = streetView(civic, 25, -20, 18, Math.min(5.8, "height" in civic ? civic.height * 0.36 : 4.8));
+  const riverfrontView = streetView(riverfront, 24, -17, 17, Math.min(7, "height" in riverfront ? riverfront.height * 0.4 : 5.5));
   return [
-    { id: "street-corner", key: "1", position: [masonry.x + 4.8, 3.3, masonry.z + 8.5], target: [masonry.x - masonry.width * 0.18, 1.5, masonry.z + masonry.depth * 0.34], fov: 42 },
-    { id: "storefront-street", key: "2", position: [masonry.x + 4.2, 2.75, masonry.z + 8.2], target: [masonry.x - masonry.width * 0.18, 1.25, masonry.z + masonry.depth * 0.34], fov: 42 },
+    { id: "street-corner", key: "1", ...loopView, fov: 48 },
+    { id: "storefront-street", key: "2", ...fultonView, fov: 48 },
     { id: "river-bridge", key: "3", position: [visualCity.river.minX - 1.55, 5.2, bridge.z + 17.2], target: [(visualCity.river.minX + visualCity.river.maxX) / 2, 0.65, bridge.z - 0.8], fov: 42 },
-    { id: "glass-facade", key: "4", position: [glass.x + 16, 5.5, glass.z + 10], target: [glass.x, glass.height * 0.4, glass.z], fov: 42 },
-    { id: "urban-composition", key: "5", position: [center.x - 15.5, 9, center.z + 14.5], target: [center.x, 3.1, center.z], fov: 42 },
+    { id: "glass-facade", key: "4", ...glassView, fov: 46 },
+    { id: "urban-composition", key: "5", position: [center.x - 27, 15, center.z + 32], target: [center.x + 2, 4.2, center.z], fov: 42 },
     { id: "public-alpha-hero", key: "6", position: [visualCity.river.maxX + 55, 30, bridge.z + 35], target: [center.x + 12, 2.8, center.z + 8], fov: 42 },
+    { id: "civic-anchor", key: "7", ...civicView, fov: 46 },
+    { id: "riverfront-tower", key: "8", ...riverfrontView, fov: 46 },
   ] as const;
 }
