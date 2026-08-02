@@ -38,6 +38,8 @@ Entity IDs are deterministic. Rename detection preserves identity; delete follow
 
 Storefronts, street furniture, parked vehicles, ambient traffic, people, vegetation, and architectural trim are non-semantic context unless a future evidence source explicitly promotes them. They may improve legibility and scale but cannot claim repository or runtime meaning.
 
+The Living Streets planner makes this boundary structural: every ambient route and agent is classified `NON_SEMANTIC_URBAN_CONTEXT` and carries empty evidence-relation, component, repository-entity, and journey identifiers. Its deterministic budgets depend on available city surfaces, not LOC, churn, dependency weight, file count, or token count. Public-frontage priority improves fixed-camera legibility without assigning meaning to a building or street.
+
 The inspector’s “为什么在这里？” section reports the grouping and placement rules separately. It does not infer importance, quality, runtime frequency, production traffic, or architectural meaning from location or appearance.
 
 See [Architecture](ARCHITECTURE.md) and [Data format](DATA_FORMAT.md) for implementation details.

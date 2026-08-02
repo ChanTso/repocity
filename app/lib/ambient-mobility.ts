@@ -1,0 +1,1436 @@
+import { stableCityHash } from "./city-visuals";
+import type { CityPoint } from "./living-city";
+import type { SemanticTransportMode } from "./semantic-city";
+import type {
+  UrbanBlock,
+  UrbanBuildingEnvelope,
+  UrbanFabricPlan,
+  UrbanStreet,
+} from "./urban-fabric";
+import type { VisualCityPlan } from "./visual-city";
+import type { AssetBackedHeroPlan } from "./asset-city";
+
+export const AMBIENT_MOBILITY_VERSION = "0.2" as const;
+export const AMBIENT_CONTEXT_CLASSIFICATION =
+  "NON_SEMANTIC_URBAN_CONTEXT" as const;
+
+export type AmbientRouteSurface =
+  | "road-lane"
+  | "intersection"
+  | "bridge-lane"
+  | "sidewalk"
+  | "crosswalk"
+  | "bridge-walk"
+  | "entrance"
+  | "plaza"
+  | "riverwalk"
+  | "river-channel";
+
+export type AmbientRouteKind = "road" | "pedestrian" | "water";
+export type AmbientMotionStrategy =
+  | "closed-loop"
+  | "ping-pong"
+  | "offscreen-wrap";
+
+export interface AmbientRoutePoint extends CityPoint {
+  surface: AmbientRouteSurface;
+  behavior: "travel" | "yield" | "dwell";
+  streetId: string | null;
+  entranceId: string | null;
+}
+
+export interface AmbientMobilityRoute {
+  id: string;
+  kind: AmbientRouteKind;
+  points: AmbientRoutePoint[];
+  motionStrategy: AmbientMotionStrategy;
+  direction: 1 | -1;
+  blockId: string | null;
+  sourceStreetIds: string[];
+  laneOffset: number;
+  laneHalfWidth: number;
+  minimumSpacing: number;
+  stopProgresses: number[];
+  reviewSpawnProgress: number | null;
+  classification: typeof AMBIENT_CONTEXT_CLASSIFICATION;
+  evidenceRelationIds: [];
+  componentIds: [];
+  entityIds: [];
+  journeyIds: [];
+}
+
+export interface AmbientAgentPlan {
+  id: string;
+  routeId: string;
+  mode: SemanticTransportMode;
+  phase: number;
+  speed: number;
+  delay: number;
+  dwellSeconds: number;
+  colorVariant: number;
+  scale: number;
+  classification: typeof AMBIENT_CONTEXT_CLASSIFICATION;
+}
+
+export interface AmbientMobilityBudgets {
+  roadVehicles: number;
+  pedestrians: number;
+  boats: number;
+}
+
+export interface AmbientMobilityDiagnostics {
+  roadRouteCount: number;
+  pedestrianRouteCount: number;
+  waterRouteCount: number;
+  vehicleCount: number;
+  pedestrianCount: number;
+  boatCount: number;
+  bridgeRoadRouteCount: number;
+  crosswalkRouteCount: number;
+  entranceRouteCount: number;
+  riverwalkRouteCount: number;
+  invalidEntranceRouteCount: number;
+  priorityRoadRouteId: string | null;
+  priorityRoadAllocation: number;
+  priorityRoadCapacity: number;
+  serializedBytes: number;
+}
+
+export interface AmbientMobilityPlan {
+  version: typeof AMBIENT_MOBILITY_VERSION;
+  seed: string;
+  classification: typeof AMBIENT_CONTEXT_CLASSIFICATION;
+  budgets: AmbientMobilityBudgets;
+  roadRoutes: AmbientMobilityRoute[];
+  pedestrianRoutes: AmbientMobilityRoute[];
+  waterRoutes: AmbientMobilityRoute[];
+  agents: AmbientAgentPlan[];
+  diagnostics: AmbientMobilityDiagnostics;
+}
+
+export interface PlanAmbientMobilityInput {
+  urbanFabric: UrbanFabricPlan;
+  visualCity?: VisualCityPlan | null;
+  publicFrontages?: readonly AmbientPublicFrontage[];
+  seed?: string;
+  budgets?: Partial<AmbientMobilityBudgets>;
+}
+
+export interface AmbientPublicFrontage {
+  id: string;
+  envelopeId: string;
+  blockId: string;
+  streetId: string;
+  points: readonly CityPoint[];
+  priority: boolean;
+}
+
+export interface MeasuredAmbientMobilityPlan {
+  plan: AmbientMobilityPlan;
+  planningMs: number;
+}
+
+interface RouteCandidate {
+  id: string;
+  points: AmbientRoutePoint[];
+  motionStrategy: AmbientMotionStrategy;
+  direction: 1 | -1;
+  blockId: string | null;
+  sourceStreetIds: string[];
+  laneOffset: number;
+  laneHalfWidth: number;
+}
+
+interface PedestrianRouteResult {
+  routes: AmbientMobilityRoute[];
+  invalidEntranceRouteCount: number;
+}
+
+const point = (
+  x: number,
+  z: number,
+  surface: AmbientRouteSurface,
+  streetId: string | null = null,
+  behavior: AmbientRoutePoint["behavior"] = "travel",
+  entranceId: string | null = null,
+): AmbientRoutePoint => ({
+  x: round(x),
+  z: round(z),
+  surface,
+  behavior,
+  streetId,
+  entranceId,
+});
+
+const clamp = (value: number, minimum: number, maximum: number) =>
+  Math.max(minimum, Math.min(maximum, value));
+
+const round = (value: number) => Math.round(value * 1_000) / 1_000;
+
+const compareText = (left: string, right: string) =>
+  left.localeCompare(right, "en");
+
+function seededOrder<T extends { id: string }>(
+  values: readonly T[],
+  seed: string,
+): T[] {
+  return [...values].sort(
+    (left, right) =>
+      stableCityHash(`${seed}:${left.id}`) -
+        stableCityHash(`${seed}:${right.id}`) ||
+      compareText(left.id, right.id),
+  );
+}
+
+function defaultBudgets(plan: UrbanFabricPlan, hasWater: boolean): AmbientMobilityBudgets {
+  const cityScale = clamp(plan.blocks.length / 12, 0.58, 1.65);
+  return {
+    roadVehicles: clamp(Math.round(24 * cityScale), 12, 32),
+    pedestrians: clamp(Math.round(36 * cityScale), 16, 48),
+    boats: hasWater ? clamp(Math.round(2 * Math.min(1.25, cityScale)), 1, 3) : 0,
+  };
+}
+
+function normalizedBudgets(
+  plan: UrbanFabricPlan,
+  hasWater: boolean,
+  override: Partial<AmbientMobilityBudgets> | undefined,
+): AmbientMobilityBudgets {
+  const defaults = defaultBudgets(plan, hasWater);
+  return {
+    roadVehicles: clamp(Math.round(override?.roadVehicles ?? defaults.roadVehicles), 0, 32),
+    pedestrians: clamp(Math.round(override?.pedestrians ?? defaults.pedestrians), 0, 48),
+    boats: hasWater
+      ? clamp(Math.round(override?.boats ?? defaults.boats), 0, 3)
+      : 0,
+  };
+}
+
+function streetMap(plan: UrbanFabricPlan): Map<string, UrbanStreet> {
+  return new Map(plan.streets.map((street) => [street.id, street]));
+}
+
+function horizontalCoordinate(street: UrbanStreet): number {
+  return street.centerline.reduce((total, p) => total + p.z, 0) /
+    Math.max(1, street.centerline.length);
+}
+
+function verticalCoordinate(street: UrbanStreet): number {
+  return street.centerline.reduce((total, p) => total + p.x, 0) /
+    Math.max(1, street.centerline.length);
+}
+
+function blockStreetFrame(
+  block: UrbanBlock,
+  streets: ReadonlyMap<string, UrbanStreet>,
+) {
+  const north = streets.get(block.streetIdsByEdge.north);
+  const east = streets.get(block.streetIdsByEdge.east);
+  const south = streets.get(block.streetIdsByEdge.south);
+  const west = streets.get(block.streetIdsByEdge.west);
+  if (!north || !east || !south || !west) return null;
+  return {
+    north,
+    east,
+    south,
+    west,
+    northZ: horizontalCoordinate(north),
+    eastX: verticalCoordinate(east),
+    southZ: horizontalCoordinate(south),
+    westX: verticalCoordinate(west),
+  };
+}
+
+function quadraticPoint(
+  start: CityPoint,
+  corner: CityPoint,
+  end: CityPoint,
+  progress: number,
+): CityPoint {
+  const inverse = 1 - progress;
+  return {
+    x:
+      inverse * inverse * start.x +
+      2 * inverse * progress * corner.x +
+      progress * progress * end.x,
+    z:
+      inverse * inverse * start.z +
+      2 * inverse * progress * corner.z +
+      progress * progress * end.z,
+  };
+}
+
+function normalizeVector(from: CityPoint, to: CityPoint): CityPoint {
+  const x = to.x - from.x;
+  const z = to.z - from.z;
+  const length = Math.max(0.0001, Math.hypot(x, z));
+  return { x: x / length, z: z / length };
+}
+
+export interface SegmentProjection extends CityPoint {
+  segmentIndex: number;
+  segmentProgress: number;
+  distance: number;
+}
+
+export function projectPointToSegment(
+  target: CityPoint,
+  start: CityPoint,
+  end: CityPoint,
+): Omit<SegmentProjection, "segmentIndex"> {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const lengthSquared = dx * dx + dz * dz;
+  const segmentProgress = lengthSquared < 0.000_001
+    ? 0
+    : clamp(
+        ((target.x - start.x) * dx + (target.z - start.z) * dz) /
+          lengthSquared,
+        0,
+        1,
+      );
+  const x = start.x + dx * segmentProgress;
+  const z = start.z + dz * segmentProgress;
+  return {
+    x,
+    z,
+    segmentProgress,
+    distance: Math.hypot(target.x - x, target.z - z),
+  };
+}
+
+export function projectPointToPolyline(
+  target: CityPoint,
+  points: readonly CityPoint[],
+  closed = false,
+): SegmentProjection | null {
+  if (points.length < 2) return null;
+  let nearest: SegmentProjection | null = null;
+  const segmentCount = closed ? points.length : points.length - 1;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const start = points[index]!;
+    const end = points[(index + 1) % points.length]!;
+    const projected = projectPointToSegment(target, start, end);
+    if (!nearest || projected.distance < nearest.distance) {
+      nearest = { ...projected, segmentIndex: index };
+    }
+  }
+  return nearest;
+}
+
+export function rotatedBuildingFootprint(
+  building: Pick<UrbanBuildingEnvelope, "x" | "z" | "width" | "depth" | "rotation">,
+  inset = 0,
+): CityPoint[] {
+  const halfWidth = Math.max(0, building.width / 2 - inset);
+  const halfDepth = Math.max(0, building.depth / 2 - inset);
+  const cosine = Math.cos(building.rotation);
+  const sine = Math.sin(building.rotation);
+  return [
+    { x: -halfWidth, z: -halfDepth },
+    { x: halfWidth, z: -halfDepth },
+    { x: halfWidth, z: halfDepth },
+    { x: -halfWidth, z: halfDepth },
+  ].map((local) => ({
+    x: building.x + local.x * cosine + local.z * sine,
+    z: building.z - local.x * sine + local.z * cosine,
+  }));
+}
+
+export function pointInsidePolygon(
+  candidate: CityPoint,
+  polygon: readonly CityPoint[],
+): boolean {
+  let inside = false;
+  for (
+    let index = 0, previous = polygon.length - 1;
+    index < polygon.length;
+    previous = index, index += 1
+  ) {
+    const current = polygon[index]!;
+    const prior = polygon[previous]!;
+    if (
+      current.z > candidate.z !== prior.z > candidate.z &&
+      candidate.x <
+        ((prior.x - current.x) * (candidate.z - current.z)) /
+          (prior.z - current.z) +
+          current.x
+    ) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
+function orientation(a: CityPoint, b: CityPoint, c: CityPoint): number {
+  return (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+}
+
+function within(value: number, left: number, right: number): boolean {
+  return value >= Math.min(left, right) - 0.000_01 &&
+    value <= Math.max(left, right) + 0.000_01;
+}
+
+export function segmentsIntersect(
+  a: CityPoint,
+  b: CityPoint,
+  c: CityPoint,
+  d: CityPoint,
+): boolean {
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  if (abC * abD < 0 && cdA * cdB < 0) return true;
+  const onSegment = (value: number, point: CityPoint, start: CityPoint, end: CityPoint) =>
+    Math.abs(value) <= 0.000_01 &&
+    within(point.x, start.x, end.x) &&
+    within(point.z, start.z, end.z);
+  return (
+    onSegment(abC, c, a, b) ||
+    onSegment(abD, d, a, b) ||
+    onSegment(cdA, a, c, d) ||
+    onSegment(cdB, b, c, d)
+  );
+}
+
+export function segmentIntersectsBuilding(
+  start: CityPoint,
+  end: CityPoint,
+  building: Pick<UrbanBuildingEnvelope, "x" | "z" | "width" | "depth" | "rotation">,
+  inset = 0.03,
+): boolean {
+  const polygon = rotatedBuildingFootprint(building, inset);
+  if (pointInsidePolygon(start, polygon) || pointInsidePolygon(end, polygon)) {
+    return true;
+  }
+  return polygon.some((corner, index) =>
+    segmentsIntersect(start, end, corner, polygon[(index + 1) % polygon.length]!),
+  );
+}
+
+export function segmentIntersectsWater(
+  start: CityPoint,
+  end: CityPoint,
+  water: Pick<VisualCityPlan["river"], "minX" | "maxX" | "minZ" | "maxZ">,
+  sampleInterval = 0.25,
+): boolean {
+  const length = Math.hypot(end.x - start.x, end.z - start.z);
+  const samples = Math.max(1, Math.ceil(length / sampleInterval));
+  for (let index = 0; index <= samples; index += 1) {
+    const progress = index / samples;
+    const x = start.x + (end.x - start.x) * progress;
+    const z = start.z + (end.z - start.z) * progress;
+    if (x > water.minX && x < water.maxX && z > water.minZ && z < water.maxZ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function sampleRoutePolyline(
+  points: readonly CityPoint[],
+  interval = 0.25,
+  closed = false,
+): CityPoint[] {
+  const samples: CityPoint[] = [];
+  const segmentCount = closed ? points.length : Math.max(0, points.length - 1);
+  for (let index = 0; index < segmentCount; index += 1) {
+    const start = points[index]!;
+    const end = points[(index + 1) % points.length]!;
+    const length = Math.hypot(end.x - start.x, end.z - start.z);
+    const count = Math.max(1, Math.ceil(length / interval));
+    for (let step = 0; step < count; step += 1) {
+      const progress = step / count;
+      samples.push({
+        x: start.x + (end.x - start.x) * progress,
+        z: start.z + (end.z - start.z) * progress,
+      });
+    }
+  }
+  if (points.length > 0) samples.push({ ...points[closed ? 0 : points.length - 1]! });
+  return samples;
+}
+
+function routeLength(points: readonly CityPoint[], closed: boolean): number {
+  let total = 0;
+  const segmentCount = closed ? points.length : Math.max(0, points.length - 1);
+  for (let index = 0; index < segmentCount; index += 1) {
+    const start = points[index]!;
+    const end = points[(index + 1) % points.length]!;
+    total += Math.hypot(end.x - start.x, end.z - start.z);
+  }
+  return total;
+}
+
+function smoothClosedCorners(
+  corners: readonly AmbientRoutePoint[],
+  radius: number,
+): AmbientRoutePoint[] {
+  const output: AmbientRoutePoint[] = [];
+  for (let index = 0; index < corners.length; index += 1) {
+    const previous = corners[(index - 1 + corners.length) % corners.length]!;
+    const corner = corners[index]!;
+    const next = corners[(index + 1) % corners.length]!;
+    const incoming = normalizeVector(corner, previous);
+    const outgoing = normalizeVector(corner, next);
+    const turnRadius = Math.min(
+      radius,
+      Math.hypot(previous.x - corner.x, previous.z - corner.z) * 0.2,
+      Math.hypot(next.x - corner.x, next.z - corner.z) * 0.2,
+    );
+    const start = {
+      x: corner.x + incoming.x * turnRadius,
+      z: corner.z + incoming.z * turnRadius,
+    };
+    const end = {
+      x: corner.x + outgoing.x * turnRadius,
+      z: corner.z + outgoing.z * turnRadius,
+    };
+    const template = { ...corner, surface: "intersection" as const, behavior: "yield" as const };
+    output.push({ ...template, ...start, x: round(start.x), z: round(start.z) });
+    for (const progress of [0.34, 0.67]) {
+      const sampled = quadraticPoint(start, corner, end, progress);
+      output.push({ ...template, x: round(sampled.x), z: round(sampled.z) });
+    }
+    output.push({ ...template, ...end, x: round(end.x), z: round(end.z) });
+  }
+  return output;
+}
+
+function roadCandidateForBlock(
+  block: UrbanBlock,
+  streets: ReadonlyMap<string, UrbanStreet>,
+  direction: 1 | -1,
+): RouteCandidate | null {
+  const frame = blockStreetFrame(block, streets);
+  if (!frame) return null;
+  const minimumWidth = Math.min(
+    frame.north.width,
+    frame.east.width,
+    frame.south.width,
+    frame.west.width,
+  );
+  const lane = clamp(minimumWidth * 0.24, 0.72, 1.18);
+  const streetIds = [
+    frame.north.id,
+    frame.east.id,
+    frame.south.id,
+    frame.west.id,
+  ];
+  // Both physical lanes use the same canonical topological order. The runtime
+  // consumes `direction` as the single source of truth for circulation.
+  const clockwiseLaneForward = [
+    point(frame.westX + lane, frame.northZ + lane, "road-lane", frame.north.id),
+    point(frame.eastX - lane, frame.northZ + lane, "road-lane", frame.east.id),
+    point(frame.eastX - lane, frame.southZ - lane, "road-lane", frame.south.id),
+    point(frame.westX + lane, frame.southZ - lane, "road-lane", frame.west.id),
+  ];
+  const counterLaneForward = [
+    point(frame.westX - lane, frame.northZ - lane, "road-lane", frame.west.id),
+    point(frame.eastX + lane, frame.northZ - lane, "road-lane", frame.north.id),
+    point(frame.eastX + lane, frame.southZ + lane, "road-lane", frame.east.id),
+    point(frame.westX - lane, frame.southZ + lane, "road-lane", frame.south.id),
+  ];
+  return {
+    id: `road:block:${block.id}:${direction > 0 ? "clockwise" : "counter"}`,
+    points: smoothClosedCorners(
+      direction > 0 ? clockwiseLaneForward : counterLaneForward,
+      1.12,
+    ),
+    motionStrategy: "closed-loop",
+    direction,
+    blockId: block.id,
+    sourceStreetIds: streetIds.sort(compareText),
+    laneOffset: direction * lane,
+    laneHalfWidth: minimumWidth / Math.max(2, Math.max(...streetIds.map((id) => streets.get(id)?.lanes ?? 2))) * 0.5,
+  };
+}
+
+function bridgeLoopCandidate(
+  plan: UrbanFabricPlan,
+  streets: ReadonlyMap<string, UrbanStreet>,
+  direction: 1 | -1,
+): RouteCandidate | null {
+  const bridges = plan.streets
+    .filter((street) => street.surface === "bridge" && street.centerline.length >= 2)
+    .sort((left, right) => horizontalCoordinate(left) - horizontalCoordinate(right));
+  if (bridges.length < 2) return null;
+  const lower = bridges[0]!;
+  const upper = bridges.at(-1)!;
+  const lowerZ = horizontalCoordinate(lower);
+  const upperZ = horizontalCoordinate(upper);
+  const lowerXs = lower.centerline.map((p) => p.x);
+  const westX = Math.min(...lowerXs);
+  const eastX = Math.max(...lowerXs);
+  const westStreet = plan.streets
+    .filter((street) => street.surface === "ground")
+    .sort(
+      (left, right) =>
+        Math.abs(verticalCoordinate(left) - westX) -
+        Math.abs(verticalCoordinate(right) - westX),
+    )[0];
+  const eastStreet = plan.streets
+    .filter((street) => street.surface === "ground")
+    .sort(
+      (left, right) =>
+        Math.abs(verticalCoordinate(left) - eastX) -
+        Math.abs(verticalCoordinate(right) - eastX),
+    )[0];
+  if (!westStreet || !eastStreet) return null;
+  const lane = clamp(Math.min(lower.width, upper.width) * 0.23, 0.72, 1.05);
+  // Lane geometry differs, but both arrays advance west-to-east over the lower
+  // bridge before returning over the upper bridge. Runtime direction reverses
+  // only the declared counter lane.
+  const clockwiseLaneForward = [
+    point(westX + lane, lowerZ + lane, "bridge-lane", lower.id),
+    point(eastX - lane, lowerZ + lane, "bridge-lane", lower.id),
+    point(eastX - lane, upperZ - lane, "road-lane", eastStreet.id),
+    point(westX + lane, upperZ - lane, "bridge-lane", upper.id),
+  ];
+  const counterLaneForward = [
+    point(westX - lane, lowerZ - lane, "bridge-lane", lower.id),
+    point(eastX + lane, lowerZ - lane, "road-lane", eastStreet.id),
+    point(eastX + lane, upperZ + lane, "bridge-lane", upper.id),
+    point(westX - lane, upperZ + lane, "road-lane", westStreet.id),
+  ];
+  return {
+    id: `road:bridge-loop:${direction > 0 ? "clockwise" : "counter"}`,
+    points: smoothClosedCorners(
+      direction > 0 ? clockwiseLaneForward : counterLaneForward,
+      1.1,
+    ).map((p) => ({
+      ...p,
+      surface:
+        p.streetId === lower.id || p.streetId === upper.id
+          ? "bridge-lane"
+          : p.surface,
+    })),
+    motionStrategy: "closed-loop",
+    direction,
+    blockId: null,
+    sourceStreetIds: [lower.id, upper.id, westStreet.id, eastStreet.id].sort(compareText),
+    laneOffset: direction * lane,
+    laneHalfWidth: Math.min(lower.width, upper.width) / 4,
+  };
+}
+
+function makeRoadRoutes(
+  plan: UrbanFabricPlan,
+  visualCity: VisualCityPlan | null,
+  seed: string,
+): AmbientMobilityRoute[] {
+  const streets = streetMap(plan);
+  const heroAdjacent = plan.blocks.filter((block) =>
+    Object.values(block.streetIdsByEdge).some(
+      (id) => streets.get(id)?.hierarchy !== "local",
+    ),
+  );
+  const pool = heroAdjacent.length > 0 ? heroAdjacent : plan.blocks;
+  const byId = new Map(pool.map((block) => [block.id, block]));
+  const heroBlocks = (visualCity?.hero.blockIds ?? [])
+    .map((id) => byId.get(id))
+    .filter((block): block is UrbanBlock => Boolean(block));
+  const heroIds = new Set(heroBlocks.map((block) => block.id));
+  const ordered = [
+    ...heroBlocks,
+    ...seededOrder(pool.filter((block) => !heroIds.has(block.id)), seed),
+  ];
+  const candidates: RouteCandidate[] = [];
+  for (const direction of [1, -1] as const) {
+    const bridge = bridgeLoopCandidate(plan, streets, direction);
+    if (bridge) candidates.push(bridge);
+  }
+  for (const block of ordered.slice(0, 5)) {
+    const direction = stableCityHash(`${seed}:${block.id}:direction`) % 2 === 0 ? 1 : -1;
+    const candidate = roadCandidateForBlock(block, streets, direction);
+    if (candidate) candidates.push(candidate);
+  }
+  return candidates.map((candidate) => ({
+    ...candidate,
+    kind: "road",
+    minimumSpacing: 0.16,
+    stopProgresses: [0.02, 0.27, 0.52, 0.77],
+    reviewSpawnProgress: null,
+    classification: AMBIENT_CONTEXT_CLASSIFICATION,
+    evidenceRelationIds: [],
+    componentIds: [],
+    entityIds: [],
+    journeyIds: [],
+  }));
+}
+
+function sidewalkLoopForBlock(
+  block: UrbanBlock,
+  streets: ReadonlyMap<string, UrbanStreet>,
+): RouteCandidate | null {
+  const frame = blockStreetFrame(block, streets);
+  if (!frame) return null;
+  const northZ = frame.northZ + frame.north.width / 2 + 0.34;
+  const southZ = frame.southZ - frame.south.width / 2 - 0.34;
+  const westX = frame.westX + frame.west.width / 2 + 0.34;
+  const eastX = frame.eastX - frame.east.width / 2 - 0.34;
+  return {
+    id: `pedestrian:block:${block.id}`,
+    points: [
+      point(westX, northZ, "sidewalk", frame.north.id),
+      point(eastX, northZ, "sidewalk", frame.east.id),
+      point(eastX, southZ, "sidewalk", frame.south.id),
+      point(westX, southZ, "sidewalk", frame.west.id),
+    ],
+    motionStrategy: "closed-loop",
+    direction: 1,
+    blockId: block.id,
+    sourceStreetIds: [frame.north.id, frame.east.id, frame.south.id, frame.west.id].sort(compareText),
+    laneOffset: 0,
+    laneHalfWidth: 0.55,
+  };
+}
+
+export function resolvePublicEntrancePoint(
+  building: UrbanBuildingEnvelope,
+): CityPoint {
+  const cosine = Math.cos(building.rotation);
+  const sine = Math.sin(building.rotation);
+  const dx = building.entrance.x - building.x;
+  const dz = building.entrance.z - building.z;
+  const localX = dx * cosine - dz * sine;
+  const localZ = dx * sine + dz * cosine;
+  const normalizedX = Math.abs(localX) / Math.max(0.001, building.width / 2);
+  const normalizedZ = Math.abs(localZ) / Math.max(0.001, building.depth / 2);
+  const publicLocal = normalizedX > normalizedZ
+    ? {
+        x: Math.sign(localX || 1) * (building.width / 2 + 0.28),
+        z: clamp(localZ, -building.depth / 2, building.depth / 2),
+      }
+    : {
+        x: clamp(localX, -building.width / 2, building.width / 2),
+        z: Math.sign(localZ || 1) * (building.depth / 2 + 0.28),
+      };
+  return {
+    x: round(building.x + publicLocal.x * cosine + publicLocal.z * sine),
+    z: round(building.z - publicLocal.x * sine + publicLocal.z * cosine),
+  };
+}
+
+function entranceRoute(
+  building: UrbanBuildingEnvelope,
+  blockLoop: RouteCandidate,
+  buildings: readonly UrbanBuildingEnvelope[],
+  visualCity: VisualCityPlan | null | undefined,
+): RouteCandidate | null {
+  const entrance = resolvePublicEntrancePoint(building);
+  const projected = projectPointToPolyline(entrance, blockLoop.points, true);
+  if (!projected) return null;
+  const template = blockLoop.points[projected.segmentIndex]!;
+  const start = point(projected.x, projected.z, "sidewalk", template.streetId);
+  const offset = normalizeVector(start, entrance);
+  const plaza = {
+    x: entrance.x - offset.x * Math.min(0.62, projected.distance * 0.35),
+    z: entrance.z - offset.z * Math.min(0.62, projected.distance * 0.35),
+  };
+  const candidate: RouteCandidate = {
+    id: `pedestrian:entrance:${building.id}`,
+    points: [
+      { ...start, behavior: "travel" },
+      point(plaza.x, plaza.z, "plaza", building.primaryStreetId),
+      point(
+        entrance.x,
+        entrance.z,
+        "entrance",
+        building.primaryStreetId,
+        "dwell",
+        building.id,
+      ),
+    ],
+    motionStrategy: "ping-pong",
+    direction: 1,
+    blockId: building.blockId,
+    sourceStreetIds: [building.primaryStreetId],
+    laneOffset: 0,
+    laneHalfWidth: 0.55,
+  };
+  for (let index = 1; index < candidate.points.length; index += 1) {
+    const segmentStart = candidate.points[index - 1]!;
+    const segmentEnd = candidate.points[index]!;
+    if (
+      buildings.some((other) =>
+        segmentIntersectsBuilding(segmentStart, segmentEnd, other),
+      ) ||
+      (visualCity &&
+        segmentIntersectsWater(segmentStart, segmentEnd, visualCity.river))
+    ) {
+      return null;
+    }
+  }
+  return candidate;
+}
+
+function crosswalkCandidates(
+  plan: UrbanFabricPlan,
+  seed: string,
+): RouteCandidate[] {
+  const horizontal = plan.streets.filter((street) => {
+    const [start, end] = street.centerline;
+    return start && end && Math.abs(end.x - start.x) >= Math.abs(end.z - start.z);
+  });
+  const vertical = plan.streets.filter((street) => {
+    const [start, end] = street.centerline;
+    return start && end && Math.abs(end.z - start.z) > Math.abs(end.x - start.x);
+  });
+  const candidates: RouteCandidate[] = [];
+  for (const h of horizontal) {
+    const z = horizontalCoordinate(h);
+    const [hStart, hEnd] = h.centerline;
+    if (!hStart || !hEnd) continue;
+    for (const v of vertical) {
+      const x = verticalCoordinate(v);
+      const [vStart, vEnd] = v.centerline;
+      if (!vStart || !vEnd) continue;
+      const insideH = x >= Math.min(hStart.x, hEnd.x) - 0.01 && x <= Math.max(hStart.x, hEnd.x) + 0.01;
+      const insideV = z >= Math.min(vStart.z, vEnd.z) - 0.01 && z <= Math.max(vStart.z, vEnd.z) + 0.01;
+      if (!insideH || !insideV || h.surface === "bridge") continue;
+      const half = v.width / 2 + 0.38;
+      candidates.push({
+        id: `pedestrian:crosswalk:${h.id}:${v.id}`,
+        points: [
+          point(x - half, z, "sidewalk", h.id),
+          point(x - v.width * 0.18, z, "crosswalk", v.id, "yield"),
+          point(x + v.width * 0.18, z, "crosswalk", v.id),
+          point(x + half, z, "sidewalk", h.id),
+        ],
+        motionStrategy: "ping-pong",
+        direction: 1,
+        blockId: null,
+        sourceStreetIds: [h.id, v.id].sort(compareText),
+        laneOffset: 0,
+        laneHalfWidth: 0.5,
+      });
+    }
+  }
+  return seededOrder(candidates, `${seed}:crosswalk`).slice(0, 3);
+}
+
+function bridgeWalkCandidates(plan: UrbanFabricPlan): RouteCandidate[] {
+  return plan.streets
+    .filter((street) => street.surface === "bridge" && street.centerline.length >= 2)
+    .sort((left, right) => compareText(left.id, right.id))
+    .slice(0, 2)
+    .map((street, index) => {
+      const [start, end] = street.centerline;
+      const offset = street.width / 2 + 0.42;
+      const direction = normalizeVector(start!, end!);
+      const side = index % 2 === 0 ? 1 : -1;
+      const sideX = -direction.z * offset * side;
+      const sideZ = direction.x * offset * side;
+      return {
+        id: `pedestrian:bridge-walk:${street.id}`,
+        points: [
+          point(start!.x + sideX, start!.z + sideZ, "sidewalk", street.id),
+          point(
+            (start!.x + end!.x) / 2 + sideX,
+            (start!.z + end!.z) / 2 + sideZ,
+            "bridge-walk",
+            street.id,
+          ),
+          point(end!.x + sideX, end!.z + sideZ, "sidewalk", street.id),
+        ],
+        motionStrategy: "ping-pong",
+        direction: 1 as const,
+        blockId: null,
+        sourceStreetIds: [street.id],
+        laneOffset: side * offset,
+        laneHalfWidth: 0.52,
+      };
+    });
+}
+
+function riverwalkCandidates(
+  plan: UrbanFabricPlan,
+  visualCity: VisualCityPlan | null | undefined,
+): RouteCandidate[] {
+  if (!visualCity) return [];
+  const river = visualCity.river;
+  const inset = 0.72;
+  const minimumZ = Math.max(plan.bounds.minZ + 2, river.minZ + 2);
+  const maximumZ = Math.min(plan.bounds.maxZ - 2, river.maxZ - 2);
+  if (maximumZ <= minimumZ) return [];
+  return [
+    { id: "west", x: river.minX - inset, direction: 1 as const },
+    { id: "east", x: river.maxX + inset, direction: -1 as const },
+  ].map((bank) => {
+    const crossings = plan.streets
+      .filter((street) => {
+        if (street.surface !== "ground" || street.centerline.length < 2) return false;
+        const [start, end] = street.centerline;
+        const horizontal = Math.abs(end!.x - start!.x) >= Math.abs(end!.z - start!.z);
+        const z = horizontalCoordinate(street);
+        return horizontal &&
+          bank.x >= Math.min(start!.x, end!.x) - street.width / 2 - 0.5 &&
+          bank.x <= Math.max(start!.x, end!.x) + street.width / 2 + 0.5 &&
+          z > minimumZ + street.width &&
+          z < maximumZ - street.width;
+      })
+      .sort((left, right) => horizontalCoordinate(left) - horizontalCoordinate(right));
+    const points: AmbientRoutePoint[] = [point(bank.x, minimumZ, "riverwalk")];
+    for (const street of crossings) {
+      const z = horizontalCoordinate(street);
+      const half = street.width / 2 + 0.38;
+      points.push(
+        point(bank.x, z - half, "riverwalk"),
+        point(bank.x, z - street.width * 0.18, "crosswalk", street.id, "yield"),
+        point(bank.x, z + street.width * 0.18, "crosswalk", street.id),
+        point(bank.x, z + half, "riverwalk"),
+      );
+    }
+    points.push(
+      point(bank.x, (minimumZ + maximumZ) / 2, "riverwalk", null, "dwell"),
+      point(bank.x, maximumZ, "riverwalk"),
+    );
+    points.sort((left, right) => left.z - right.z);
+    return {
+      id: `pedestrian:riverwalk:${bank.id}`,
+      points,
+      motionStrategy: "ping-pong" as const,
+      direction: bank.direction,
+      blockId: null,
+      sourceStreetIds: crossings.map((street) => street.id).sort(compareText),
+      laneOffset: 0,
+      laneHalfWidth: 0.6,
+    };
+  });
+}
+
+export function deriveAmbientPublicFrontages(
+  assetHeroPlan: AssetBackedHeroPlan,
+  urbanFabric: UrbanFabricPlan,
+): AmbientPublicFrontage[] {
+  return assetHeroPlan.buildings.map((building) => {
+    const programs = assetHeroPlan.streetPrograms
+      .filter(
+        (program) =>
+          program.ownerBuildingId === building.semanticBuildingId &&
+          program.id.startsWith(`urban-program-${building.envelopeId}-`),
+      )
+      .sort((left, right) => {
+        const tangentX = Math.cos(building.rotation);
+        const tangentZ = -Math.sin(building.rotation);
+        return left.x * tangentX + left.z * tangentZ -
+          (right.x * tangentX + right.z * tangentZ);
+      });
+    const forwardX = Math.sin(building.rotation);
+    const forwardZ = Math.cos(building.rotation);
+    const tangentX = Math.cos(building.rotation);
+    const tangentZ = -Math.sin(building.rotation);
+    const edgePadding = Math.max(0.42, building.width * 0.08);
+    const entrancePoints = programs.map((program) => ({
+      x: program.x + forwardX * 0.42,
+      z: program.z + forwardZ * 0.42,
+    }));
+    const first = entrancePoints[0] ?? { x: building.x, z: building.z };
+    const last = entrancePoints.at(-1) ?? first;
+    const envelope = urbanFabric.architecturalEnvelopes.find(
+      (candidate) => candidate.id === building.envelopeId,
+    );
+    return {
+      id: building.id,
+      envelopeId: building.envelopeId,
+      blockId: building.blockId,
+      streetId: envelope?.primaryStreetId ?? "visual-public-frontage",
+      points: [
+        {
+          x: first.x - tangentX * edgePadding,
+          z: first.z - tangentZ * edgePadding,
+        },
+        ...entrancePoints,
+        {
+          x: last.x + tangentX * edgePadding,
+          z: last.z + tangentZ * edgePadding,
+        },
+      ],
+      priority: building.node === "masonry-building",
+    };
+  });
+}
+
+function walkingPolylineIsSafe(
+  points: readonly CityPoint[],
+  buildings: readonly Pick<
+    UrbanBuildingEnvelope,
+    "x" | "z" | "width" | "depth" | "rotation"
+  >[],
+  visualCity: VisualCityPlan | null | undefined,
+): boolean {
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1]!;
+    const end = points[index]!;
+    if (
+      buildings.some((building) =>
+        segmentIntersectsBuilding(start, end, building),
+      ) ||
+      (visualCity && segmentIntersectsWater(start, end, visualCity.river))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function makePedestrianRoutes(
+  plan: UrbanFabricPlan,
+  visualCity: VisualCityPlan | null | undefined,
+  publicFrontages: readonly AmbientPublicFrontage[],
+  seed: string,
+): PedestrianRouteResult {
+  const streets = streetMap(plan);
+  const heroBlockIds = new Set(visualCity?.hero.blockIds ?? []);
+  const heroBlocks = plan.blocks.filter((block) => heroBlockIds.has(block.id));
+  const remaining = plan.blocks.filter((block) => !heroBlockIds.has(block.id));
+  const orderedBlocks = [
+    ...heroBlocks.sort((left, right) => compareText(left.id, right.id)),
+    ...seededOrder(remaining, `${seed}:walk-block`),
+  ];
+  const loops = orderedBlocks
+    .slice(0, 6)
+    .map((block) => sidewalkLoopForBlock(block, streets))
+    .filter((candidate): candidate is RouteCandidate => Boolean(candidate));
+  const loopByBlock = new Map<string, RouteCandidate>();
+  for (const loop of loops) {
+    const blockId = loop.id.replace("pedestrian:block:", "");
+    loopByBlock.set(blockId, loop);
+  }
+  const eligibleEntrances = plan.buildings.filter((building) =>
+    loopByBlock.has(building.blockId),
+  );
+  const frontageEnvelopeIds = new Set(
+    publicFrontages.map((frontage) => frontage.envelopeId),
+  );
+  const entranceOrder = seededOrder(
+    eligibleEntrances.filter(
+      (building) => !frontageEnvelopeIds.has(building.id),
+    ),
+    `${seed}:entrance`,
+  );
+  let invalidEntranceRouteCount = 0;
+  const entranceRoutes: RouteCandidate[] = [];
+  for (const building of entranceOrder) {
+    if (entranceRoutes.length >= 4) break;
+    const loop = loopByBlock.get(building.blockId);
+    const candidate = loop
+      ? entranceRoute(building, loop, plan.buildings, visualCity)
+      : null;
+    if (candidate) entranceRoutes.push(candidate);
+    else invalidEntranceRouteCount += 1;
+  }
+  const frontageCandidates: RouteCandidate[] = [...publicFrontages]
+    .filter((frontage) => frontage.points.length >= 2)
+    .sort(
+      (left, right) =>
+        Number(right.priority) - Number(left.priority) ||
+        compareText(left.id, right.id),
+    )
+    .map((frontage) => ({
+      id: `pedestrian:frontage:${frontage.id}`,
+      points: frontage.points.map((frontagePoint, index, points) =>
+        point(
+          frontagePoint.x,
+          frontagePoint.z,
+          index > 0 && index < points.length - 1 ? "entrance" : "sidewalk",
+          frontage.streetId,
+          index > 0 && index < points.length - 1 ? "dwell" : "travel",
+          index > 0 && index < points.length - 1
+            ? frontage.envelopeId
+            : null,
+        ),
+      ),
+      motionStrategy: "ping-pong",
+      direction: 1,
+      blockId: frontage.blockId,
+      sourceStreetIds: [frontage.streetId],
+      laneOffset: 0,
+      laneHalfWidth: 0.55,
+    }));
+  const frontageRoutes = frontageCandidates.filter((candidate) => {
+    const safe = walkingPolylineIsSafe(
+      candidate.points,
+      plan.architecturalEnvelopes,
+      visualCity,
+    );
+    if (!safe) invalidEntranceRouteCount += 1;
+    return safe;
+  });
+  const candidates = [
+    ...frontageRoutes,
+    ...entranceRoutes,
+    ...loops,
+    ...crosswalkCandidates(plan, seed),
+    ...bridgeWalkCandidates(plan),
+    ...riverwalkCandidates(plan, visualCity),
+  ];
+  return {
+    invalidEntranceRouteCount,
+    routes: candidates.map((candidate) => ({
+      ...candidate,
+      kind: "pedestrian",
+      minimumSpacing: 0.11,
+      stopProgresses: candidate.points
+        .map((candidatePoint, index) =>
+          candidatePoint.behavior !== "travel"
+            ? round(index / Math.max(1, candidate.points.length - 1))
+            : -1,
+        )
+        .filter((progress) => progress >= 0),
+      reviewSpawnProgress: null,
+      classification: AMBIENT_CONTEXT_CLASSIFICATION,
+      evidenceRelationIds: [],
+      componentIds: [],
+      entityIds: [],
+      journeyIds: [],
+    })),
+  };
+}
+
+function makeWaterRoutes(
+  plan: UrbanFabricPlan,
+  visualCity: VisualCityPlan | null | undefined,
+): AmbientMobilityRoute[] {
+  if (!visualCity) return [];
+  const river = visualCity.river;
+  const width = river.maxX - river.minX;
+  const minimumZ = Math.max(river.minZ + 3, plan.bounds.minZ - 14);
+  const maximumZ = Math.min(river.maxZ - 3, plan.bounds.maxZ + 14);
+  if (width < 1.5 || maximumZ <= minimumZ) return [];
+  const centerX = (river.minX + river.maxX) / 2;
+  const offset = clamp(width * 0.19, 0.75, 1.55);
+  const bridgeZ = plan.streets
+    .filter((street) => street.surface === "bridge")
+    .map((street) => {
+      const [start, end] = street.centerline;
+      return start && end ? (start.z + end.z) / 2 : Number.NaN;
+    })
+    .filter(Number.isFinite)
+    .sort((left, right) => Math.abs(left) - Math.abs(right))[0];
+  const reviewSpawnProgress = Number.isFinite(bridgeZ)
+    ? round(
+        clamp(
+          (bridgeZ! + 5.5 - minimumZ) / (maximumZ - minimumZ),
+          0.08,
+          0.92,
+        ),
+      )
+    : 0.5;
+  return [-1, 1].map((directionValue) => {
+    const direction = directionValue as 1 | -1;
+    const x = centerX + direction * offset;
+    const route: AmbientMobilityRoute = {
+      id: `water:channel:${direction > 0 ? "upstream" : "downstream"}`,
+      kind: "water",
+      points: waterRoutePoints(x, minimumZ, maximumZ),
+      motionStrategy: "offscreen-wrap",
+      direction,
+      blockId: null,
+      sourceStreetIds: [],
+      laneOffset: direction * offset,
+      laneHalfWidth: Math.max(0.4, width / 2 - Math.abs(offset) - 0.45),
+      minimumSpacing: 0.24,
+      stopProgresses: [],
+      reviewSpawnProgress,
+      classification: AMBIENT_CONTEXT_CLASSIFICATION,
+      evidenceRelationIds: [],
+      componentIds: [],
+      entityIds: [],
+      journeyIds: [],
+    };
+    return route;
+  });
+}
+
+export function waterRoutePoints(
+  x: number,
+  minimumZ: number,
+  maximumZ: number,
+): AmbientRoutePoint[] {
+  return [0, 0.25, 0.5, 0.75, 1].map((progress) =>
+    point(
+      x,
+      minimumZ + (maximumZ - minimumZ) * progress,
+      "river-channel",
+    ),
+  );
+}
+
+function roadMode(index: number, seed: number): SemanticTransportMode {
+  if ((index + seed) % 11 === 0) return "transit";
+  if ((index + seed) % 7 === 0) return "freight";
+  return "car";
+}
+
+function speedFor(mode: SemanticTransportMode, seed: number): number {
+  const variation = ((seed >>> 8) % 13) / 10_000;
+  switch (mode) {
+    case "pedestrian":
+      return 0.018 + variation * 0.45;
+    case "boat":
+      return 0.013 + variation * 0.32;
+    case "transit":
+      return 0.021 + variation * 0.32;
+    case "freight":
+      return 0.019 + variation * 0.3;
+    case "car":
+      return 0.027 + variation;
+  }
+}
+
+const MAXIMUM_VEHICLE_LENGTH = 1.92 * 1.06;
+const VEHICLE_CLEARANCE = 0.45;
+
+export function roadRouteCapacity(route: AmbientMobilityRoute): number {
+  if (route.kind !== "road") return Number.POSITIVE_INFINITY;
+  const length = routeLength(
+    route.points,
+    route.motionStrategy === "closed-loop",
+  );
+  const physicalGap = (MAXIMUM_VEHICLE_LENGTH + VEHICLE_CLEARANCE) /
+    Math.max(0.001, length);
+  const requiredGap = Math.max(route.minimumSpacing, physicalGap);
+  return Math.max(1, Math.floor(1 / requiredGap));
+}
+
+function agentsForRoutes(
+  routes: readonly AmbientMobilityRoute[],
+  count: number,
+  category: "road" | "pedestrian" | "water",
+  seed: string,
+  priorityRouteId?: string | null,
+  priorityCount = 0,
+): AmbientAgentPlan[] {
+  if (routes.length === 0 || count <= 0) return [];
+  const allocations = new Array(routes.length).fill(0) as number[];
+  const capacities = routes.map((route) =>
+    category === "road" ? roadRouteCapacity(route) : Number.POSITIVE_INFINITY,
+  );
+  const priorityIndex = priorityRouteId
+    ? routes.findIndex((route) => route.id === priorityRouteId)
+    : -1;
+  const reserved = priorityIndex >= 0
+    ? Math.min(count, priorityCount, capacities[priorityIndex]!)
+    : 0;
+  if (priorityIndex >= 0) allocations[priorityIndex] = reserved;
+  const nonPriorityRoutes = routes
+    .map((_, index) => index)
+    .filter((index) => index !== priorityIndex);
+  const distributionRoutes = nonPriorityRoutes.length > 0
+    ? nonPriorityRoutes
+    : priorityIndex >= 0
+      ? [priorityIndex]
+      : [];
+  let remaining = count - reserved;
+  let cursor = 0;
+  while (remaining > 0 && distributionRoutes.length > 0) {
+    const allocationIndex = distributionRoutes[cursor % distributionRoutes.length]!;
+    cursor += 1;
+    if (allocations[allocationIndex]! >= capacities[allocationIndex]!) {
+      if (distributionRoutes.every((index) => allocations[index]! >= capacities[index]!)) {
+        break;
+      }
+      continue;
+    }
+    allocations[allocationIndex] += 1;
+    remaining -= 1;
+  }
+  while (
+    remaining > 0 &&
+    priorityIndex >= 0 &&
+    allocations[priorityIndex]! < capacities[priorityIndex]!
+  ) {
+    allocations[priorityIndex] += 1;
+    remaining -= 1;
+  }
+  const agents: AmbientAgentPlan[] = [];
+  let globalIndex = 0;
+  routes.forEach((route, routeIndex) => {
+    const routeCount = allocations[routeIndex]!;
+    const routeSeed = stableCityHash(`${seed}:${route.id}:phase`);
+    const phaseOffset = ((routeSeed >>> 7) % 1000) / 1000;
+    const routeMode = category === "pedestrian"
+      ? "pedestrian"
+      : category === "water"
+        ? "boat"
+        : "car";
+    const routeSpeed = round(speedFor(routeMode, routeSeed));
+    const routeDelay = category === "road"
+      ? round(((routeSeed >>> 12) % 850) / 1_000)
+      : 0;
+    const routeDwellSeconds = route.stopProgresses.length > 0
+      ? round(0.45 + ((routeSeed >>> 17) % 75) / 100)
+      : 0;
+    for (let index = 0; index < routeCount; index += 1) {
+      const agentSeed = stableCityHash(`${seed}:${route.id}:${index}`);
+      const mode =
+        category === "pedestrian"
+          ? "pedestrian"
+          : category === "water"
+            ? "boat"
+            : roadMode(globalIndex, agentSeed % 13);
+      agents.push({
+        id: `ambient:${mode}:${route.id}:${index}`,
+        routeId: route.id,
+        mode,
+        phase:
+          category === "water" && index === 0
+            ? round(
+                (route.direction > 0
+                  ? route.reviewSpawnProgress ?? 0.5
+                  : 1 - (route.reviewSpawnProgress ?? 0.5)) +
+                  (routeIndex === 0 ? -0.025 : 0.035),
+              )
+            : round((phaseOffset + index / Math.max(1, routeCount)) % 1),
+        speed: routeSpeed,
+        delay: routeDelay,
+        dwellSeconds: routeDwellSeconds,
+        colorVariant: agentSeed % 7,
+        scale: round(0.9 + ((agentSeed >>> 20) % 17) / 100),
+        classification: AMBIENT_CONTEXT_CLASSIFICATION,
+      });
+      globalIndex += 1;
+    }
+  });
+  return agents;
+}
+
+function countSurface(
+  routes: readonly AmbientMobilityRoute[],
+  surface: AmbientRouteSurface,
+): number {
+  return routes.filter((route) =>
+    route.points.some((candidate) => candidate.surface === surface),
+  ).length;
+}
+
+function diagnosticsFor(
+  roadRoutes: readonly AmbientMobilityRoute[],
+  pedestrianRoutes: readonly AmbientMobilityRoute[],
+  waterRoutes: readonly AmbientMobilityRoute[],
+  agents: readonly AmbientAgentPlan[],
+  invalidEntranceRouteCount: number,
+  priorityRoadRoute: AmbientMobilityRoute | null,
+): AmbientMobilityDiagnostics {
+  const deterministicPayload = {
+    roadRoutes,
+    pedestrianRoutes,
+    waterRoutes,
+    agents,
+  };
+  return {
+    roadRouteCount: roadRoutes.length,
+    pedestrianRouteCount: pedestrianRoutes.length,
+    waterRouteCount: waterRoutes.length,
+    vehicleCount: agents.filter((agent) =>
+      agent.mode === "car" || agent.mode === "freight" || agent.mode === "transit",
+    ).length,
+    pedestrianCount: agents.filter((agent) => agent.mode === "pedestrian").length,
+    boatCount: agents.filter((agent) => agent.mode === "boat").length,
+    bridgeRoadRouteCount: countSurface(roadRoutes, "bridge-lane"),
+    crosswalkRouteCount: countSurface(pedestrianRoutes, "crosswalk"),
+    entranceRouteCount: countSurface(pedestrianRoutes, "entrance"),
+    riverwalkRouteCount: countSurface(pedestrianRoutes, "riverwalk"),
+    invalidEntranceRouteCount,
+    priorityRoadRouteId: priorityRoadRoute?.id ?? null,
+    priorityRoadAllocation: priorityRoadRoute
+      ? agents.filter((agent) => agent.routeId === priorityRoadRoute.id).length
+      : 0,
+    priorityRoadCapacity: priorityRoadRoute
+      ? roadRouteCapacity(priorityRoadRoute)
+      : 0,
+    serializedBytes: JSON.stringify(deterministicPayload).length,
+  };
+}
+
+export function planAmbientMobility({
+  urbanFabric,
+  visualCity = null,
+  publicFrontages = [],
+  seed = `${urbanFabric.seed}:living-streets-v0.2`,
+  budgets: budgetOverride,
+}: PlanAmbientMobilityInput): AmbientMobilityPlan {
+  const hasWater = Boolean(
+    visualCity && visualCity.river.maxX - visualCity.river.minX >= 1.5,
+  );
+  const budgets = normalizedBudgets(urbanFabric, hasWater, budgetOverride);
+  const roadRoutes = makeRoadRoutes(urbanFabric, visualCity, seed);
+  const pedestrianResult = makePedestrianRoutes(
+    urbanFabric,
+    visualCity,
+    publicFrontages,
+    seed,
+  );
+  const pedestrianRoutes = pedestrianResult.routes;
+  const waterRoutes = makeWaterRoutes(urbanFabric, visualCity);
+  const priorityFrontage = publicFrontages.find((frontage) => frontage.priority);
+  const focusEnvelope = priorityFrontage
+    ? urbanFabric.architecturalEnvelopes.find(
+        (building) => building.id === priorityFrontage.envelopeId,
+      )
+    : null;
+  const priorityRoadRoute = focusEnvelope
+    ? roadRoutes.find((route) => route.blockId === focusEnvelope.blockId) ?? null
+    : null;
+  const priorityRoadRouteId = priorityRoadRoute?.id ?? null;
+  const priorityPedestrianRouteId = priorityFrontage
+    ? `pedestrian:frontage:${priorityFrontage.id}`
+    : null;
+  const agents = [
+    ...agentsForRoutes(
+      roadRoutes,
+      budgets.roadVehicles,
+      "road",
+      seed,
+      priorityRoadRouteId,
+      8,
+    ),
+    ...agentsForRoutes(
+      pedestrianRoutes,
+      budgets.pedestrians,
+      "pedestrian",
+      seed,
+      priorityPedestrianRouteId,
+      8,
+    ),
+    ...agentsForRoutes(waterRoutes, budgets.boats, "water", seed),
+  ].sort((left, right) => compareText(left.id, right.id));
+  return {
+    version: AMBIENT_MOBILITY_VERSION,
+    seed,
+    classification: AMBIENT_CONTEXT_CLASSIFICATION,
+    budgets,
+    roadRoutes,
+    pedestrianRoutes,
+    waterRoutes,
+    agents,
+    diagnostics: diagnosticsFor(
+      roadRoutes,
+      pedestrianRoutes,
+      waterRoutes,
+      agents,
+      pedestrianResult.invalidEntranceRouteCount,
+      priorityRoadRoute,
+    ),
+  };
+}
+
+export function measureAmbientMobilityPlan(
+  input: PlanAmbientMobilityInput,
+): MeasuredAmbientMobilityPlan {
+  const started = performance.now();
+  const plan = planAmbientMobility(input);
+  return {
+    plan,
+    planningMs: round(performance.now() - started),
+  };
+}
+
+export function allAmbientRoutes(
+  plan: AmbientMobilityPlan,
+): readonly AmbientMobilityRoute[] {
+  return [...plan.roadRoutes, ...plan.pedestrianRoutes, ...plan.waterRoutes];
+}

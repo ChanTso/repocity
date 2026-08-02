@@ -39,6 +39,7 @@ Districts provide component-level context. Buildings stay linked to real reposit
 - Evidence-backed repository and delivery journeys
 - Explore, semantic Map, evidence Flow, and Git-history Replay modes
 - River, bridge, street, transit, and asset-backed hero-district context
+- Deterministic ambient lanes, sidewalks, crossings, entrances, riverwalks, and boats that remain explicitly non-semantic
 - Explicit provenance for inferred and simulated information
 - Local analysis that does not execute the target repository
 
@@ -47,6 +48,8 @@ Districts provide component-level context. Buildings stay linked to real reposit
 ![RepoCity evidence-backed flow](docs/media/repocity-flow.png)
 
 Flow mode turns supported repository relationships into inspectable journeys. Routes identify their provenance and evidence. Reduced ambient vehicles and people remain visible for city scale, but the persistent legend and rendering language identify them as deterministic, non-semantic context rather than telemetry.
+
+Ambient density is a fixed city-presentation budget. It is not derived from repository importance, runtime demand, or production traffic, and pausing Flow evidence does not pause the surrounding city context.
 
 Read [Evidence flows](docs/evidence-flows.md).
 

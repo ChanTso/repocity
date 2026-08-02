@@ -48,11 +48,10 @@ import {
   type LivingCityPlan,
   type PlannedBuilding,
 } from "@/app/lib/living-city";
+import type { AmbientMobilityPlan } from "@/app/lib/ambient-mobility";
+import { sceneMotionDiagnostics } from "@/app/lib/scene-motion-diagnostics";
 import type { SemanticFlowProjection } from "@/app/lib/semantic-flow";
-import type {
-  SemanticCityPlan,
-  SemanticMobilityRoute,
-} from "@/app/lib/semantic-city";
+import type { SemanticCityPlan } from "@/app/lib/semantic-city";
 import type {
   CityVisualProfile,
   SemanticLabel,
@@ -134,7 +133,8 @@ export interface CitySceneProps {
   semanticProfile?: CityVisualProfile;
   semanticLabels?: readonly SemanticLabel[];
   semanticRelations?: readonly SemanticRelationOverlay[];
-  ambientMobilityRoutes?: readonly SemanticMobilityRoute[];
+  ambientMobilityPlan?: AmbientMobilityPlan | null;
+  ambientPlanningMs?: number;
   /** Independent ambient-city playback; evidence playback is flowPlaying. */
   ambientPlaying?: boolean;
   /** Explicit camera action. Mode switches themselves preserve camera state. */
@@ -198,7 +198,8 @@ export function CityScene({
   semanticProfile,
   semanticLabels = [],
   semanticRelations = [],
-  ambientMobilityRoutes = [],
+  ambientMobilityPlan = null,
+  ambientPlanningMs = 0,
   ambientPlaying = true,
   cameraPresetRequest = null,
   selectedComponentId = null,
@@ -230,6 +231,11 @@ export function CityScene({
     controlledSelectedEntityId === undefined
       ? localSelectedEntityId
       : controlledSelectedEntityId;
+  const motionDiagnostics = sceneMotionDiagnostics(
+    ambientMobilityPlan,
+    flowJourney,
+    { showTraffic, showPedestrians, showWaterTraffic },
+  );
 
   const plan = useMemo(
     () =>
@@ -385,7 +391,17 @@ export function CityScene({
       aria-label={ariaLabel}
       className={className}
       data-ambient-playing={ambientPlaying ? "true" : "false"}
+      data-ambient-count-semantics="planned"
+      data-ambient-vehicle-count={motionDiagnostics.plannedVehicleCount}
+      data-ambient-pedestrian-count={motionDiagnostics.plannedPedestrianCount}
+      data-ambient-boat-count={motionDiagnostics.plannedBoatCount}
+      data-ambient-enabled-vehicle-count={motionDiagnostics.enabledVehicleCount}
+      data-ambient-enabled-pedestrian-count={motionDiagnostics.enabledPedestrianCount}
+      data-ambient-enabled-boat-count={motionDiagnostics.enabledBoatCount}
+      data-ambient-visible-count-measured="false"
+      data-ambient-planning-ms={ambientPlanningMs.toFixed(3)}
       data-evidence-playing={flowPlaying ? "true" : "false"}
+      data-evidence-token-count={motionDiagnostics.evidenceTokenCount}
       data-mode-camera-policy="preserve"
       onPointerLeave={() => hoverEntity(null)}
       role="region"
@@ -453,7 +469,7 @@ export function CityScene({
           semanticLabels={semanticLabels}
           semanticProfile={semanticProfile}
           semanticRelations={semanticRelations}
-          ambientMobilityRoutes={ambientMobilityRoutes}
+          ambientMobilityPlan={ambientMobilityPlan}
           ambientPlaying={ambientPlaying}
           cameraPresetRequest={cameraPresetRequest}
           selectedComponentId={selectedComponentId}
@@ -485,7 +501,7 @@ interface SceneContentsProps {
   semanticProfile?: CityVisualProfile;
   semanticLabels: readonly SemanticLabel[];
   semanticRelations: readonly SemanticRelationOverlay[];
-  ambientMobilityRoutes: readonly SemanticMobilityRoute[];
+  ambientMobilityPlan: AmbientMobilityPlan | null;
   ambientPlaying: boolean;
   cameraPresetRequest: {
     id: AssetReviewCameraId;
@@ -625,7 +641,7 @@ function SceneContents({
   semanticProfile,
   semanticLabels,
   semanticRelations,
-  ambientMobilityRoutes,
+  ambientMobilityPlan,
   ambientPlaying,
   cameraPresetRequest,
   selectedComponentId,
@@ -1018,7 +1034,7 @@ function SceneContents({
           // These urban-fabric routes are ambient city context. They are kept
           // visually subordinate to FlowJourneyLayer and never presented as
           // observed traffic or journey evidence.
-          mobilityRoutes={ambientMobilityRoutes}
+          mobilityPlan={ambientMobilityPlan}
           plan={semanticCityPlan}
           urbanFabric={urbanFabricPlan}
           visualCity={visualCityPlan}

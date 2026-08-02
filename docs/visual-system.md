@@ -32,4 +32,12 @@ Selected file/building labels outrank unselected component labels, and product H
 
 Mode saturation and brightness use a CSS filter on the complete WebGL canvas. The filter therefore affects city geometry, semantic overlays, journeys, and replay geometry together; it is not an independently selective “city-only” treatment. Ambient opacity/speed and semantic/relation opacity are renderer-level layer controls. Mode switches preserve the current camera, while the Map overview button and review-camera key `6` apply the public-alpha overview explicitly.
 
+## Living Streets activity layer
+
+The ambient plan uses existing connected roads, validated public frontages, sidewalks, crossings, bridge walks, riverwalks, and river bounds. Motion is explicit: `closed-loop` routes contain a real final-to-first segment, `ping-pong` is reserved for finite walking approaches, and `offscreen-wrap` carries boats unidirectionally beyond the review bounds. Vehicles are lane-offset, capacity-limited, instance-batched, and share a route clock so dwell cannot reorder them. Entrances project to sidewalk segments and are rejected when sampled geometry intersects rotated footprints or water. Day/night details use shared emissive instances rather than dynamic per-agent lights.
+
+All ambient agents remain `NON_SEMANTIC_URBAN_CONTEXT`. They are unselectable, use no repository density metric, and never receive the evidence token's silhouette, route pulse, stage number, or provenance UI.
+
+Diagnostics distinguish `planned` from `enabled` ambient counts. No count is called visible because no camera census exists. Evidence token count is the exact current journey token-array length.
+
 See [the asset manifest](assets/city-kit-v1-manifest.md), [V4.2 asset strategy](VISUAL_CITY_V4_2.md), and [V4.3 street-reality pass](VISUAL_CITY_V4_3.md).

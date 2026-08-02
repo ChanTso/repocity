@@ -67,6 +67,11 @@ import {
   isRelationVisibleAtCommit,
 } from "../lib/city-visuals";
 import { planLivingCity } from "../lib/living-city";
+import {
+  deriveAmbientPublicFrontages,
+  measureAmbientMobilityPlan,
+} from "../lib/ambient-mobility";
+import { planAssetBackedHero } from "../lib/asset-city";
 import { planSemanticCity } from "../lib/semantic-city";
 import { projectSemanticFlow } from "../lib/semantic-flow";
 import { planFlowSimulation } from "../lib/flow-simulation";
@@ -75,7 +80,6 @@ import { planVisualCity } from "../lib/visual-city";
 import { resolveViewerReplayFrame } from "../lib/viewer-replay";
 import {
   resolveAmbientPresentation,
-  resolveAmbientMobilityRoutes,
   resolveComponentSelection,
   resolveLayerPlayback,
   resolveModeVisualProfile,
@@ -869,9 +873,22 @@ export function RepoCityApp() {
     () => planVisualCity({ semanticPlan: semanticCityPlan, urbanFabric: urbanFabricPlan }),
     [semanticCityPlan, urbanFabricPlan],
   );
-  const ambientMobilityRoutes = useMemo(
-    () => resolveAmbientMobilityRoutes(urbanFabricPlan, visualCityPlan),
+  const assetHeroPlan = useMemo(
+    () => planAssetBackedHero(urbanFabricPlan, visualCityPlan),
     [urbanFabricPlan, visualCityPlan],
+  );
+  const ambientPublicFrontages = useMemo(
+    () => deriveAmbientPublicFrontages(assetHeroPlan, urbanFabricPlan),
+    [assetHeroPlan, urbanFabricPlan],
+  );
+  const measuredAmbientMobility = useMemo(
+    () =>
+      measureAmbientMobilityPlan({
+        urbanFabric: urbanFabricPlan,
+        visualCity: visualCityPlan,
+        publicFrontages: ambientPublicFrontages,
+      }),
+    [ambientPublicFrontages, urbanFabricPlan, visualCityPlan],
   );
   const cityCapabilities = useMemo(() => {
     return {
@@ -1978,7 +1995,8 @@ export function RepoCityApp() {
             urbanFabricPlan={urbanFabricPlan}
             visualCityPlan={visualCityPlan}
             semanticFlowProjection={semanticFlowProjection}
-            ambientMobilityRoutes={ambientMobilityRoutes}
+            ambientMobilityPlan={measuredAmbientMobility.plan}
+            ambientPlanningMs={measuredAmbientMobility.planningMs}
             entities={entities}
             relations={relations}
             districts={districts}

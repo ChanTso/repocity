@@ -8,10 +8,18 @@ import type {
   SemanticCampus,
   SemanticCityPlan,
   SemanticFileSlot,
-  SemanticMobilityRoute,
   SemanticRoad,
   SemanticWaterBoundary,
 } from "@/app/lib/semantic-city";
+import type {
+  AmbientAgentPlan,
+  AmbientMobilityPlan,
+} from "@/app/lib/ambient-mobility";
+import {
+  prepareAmbientMotionRoute,
+  sampleAmbientAgentInto,
+  type PreparedAmbientMotionRoute,
+} from "@/app/lib/ambient-motion";
 import type { CityPoint } from "@/app/lib/living-city";
 import type {
   UrbanArchitecturalEnvelope,
@@ -37,7 +45,7 @@ const ELEVATED_ROAD_Y = 2.8;
 const BRIDGE_RISE = 0.82;
 const TREE_CLEARANCE = 0.7;
 
-type MobilityMode = SemanticMobilityRoute["mode"];
+type MobilityMode = AmbientAgentPlan["mode"];
 
 interface BoxInstance {
   x: number;
@@ -130,11 +138,9 @@ interface MetropolisDisplayBounds {
 
 interface PreparedMotionRoute {
   id: string;
-  mode: MobilityMode;
-  curve: THREE.CurvePath<THREE.Vector3>;
-  weight: number;
-  closed: boolean;
-  length: number;
+  motion: PreparedAmbientMotionRoute;
+  surfaceY: "water" | "road" | "ground";
+  roadSamples: readonly RoadSurfaceSample[];
 }
 
 interface MotionAgent {
@@ -143,7 +149,9 @@ interface MotionAgent {
   route: PreparedMotionRoute;
   phase: number;
   speed: number;
-  laneOffset: number;
+  delay: number;
+  dwellSeconds: number;
+  lateralOffset: number;
   color: string;
   scale: number;
 }
@@ -156,7 +164,7 @@ export interface SemanticMetropolisProps {
    * Scenario-authorized agents. Omitting this prop renders no moving entities;
    * static plan relations shape infrastructure but never create traffic.
    */
-  mobilityRoutes?: readonly SemanticMobilityRoute[];
+  mobilityPlan?: AmbientMobilityPlan | null;
   /** Local solar hour, 0...24. */
   timeOfDay?: number;
   /**
@@ -191,7 +199,7 @@ export function SemanticMetropolis({
   plan,
   urbanFabric,
   visualCity,
-  mobilityRoutes = EMPTY_MOBILITY_ROUTES,
+  mobilityPlan = null,
   timeOfDay = 14,
   reservedEntityIds = EMPTY_ID_SET,
   activeComponentIds = null,
@@ -503,8 +511,9 @@ export function SemanticMetropolis({
 
       <SemanticMobility
         opacity={ambientOpacity}
-        routes={mobilityRoutes}
+        plan={mobilityPlan}
         playing={playing}
+        paletteNight={palette.night}
         roadSamples={roadGeometry.surfaceSamples}
         showPedestrians={showPedestrians}
         showTraffic={showTraffic}
@@ -581,8 +590,6 @@ function RenderDiagnostics({
 }
 
 const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
-const EMPTY_MOBILITY_ROUTES: readonly SemanticMobilityRoute[] = [];
-
 function makeMetropolisDisplayBounds(
   plan: SemanticCityPlan,
 ): MetropolisDisplayBounds {
@@ -3922,38 +3929,38 @@ function pointInPolygon(
 }
 
 function SemanticMobility({
-  routes,
+  plan,
   roadSamples,
   playing,
   opacity,
   speedScale,
+  paletteNight,
   showTraffic,
   showPedestrians,
   showWaterTraffic,
 }: {
-  routes: readonly SemanticMobilityRoute[];
+  plan: AmbientMobilityPlan | null;
   roadSamples: readonly RoadSurfaceSample[];
   playing: boolean;
   opacity: number;
   speedScale: number;
+  paletteNight: number;
   showTraffic: boolean;
   showPedestrians: boolean;
   showWaterTraffic: boolean;
 }) {
   const agents = useMemo(
-    () => makeMotionAgents(routes, roadSamples),
-    [roadSamples, routes],
+    () => makeMotionAgents(plan, roadSamples),
+    [plan, roadSamples],
   );
-  const cars = useMemo(
-    () => agents.filter((agent) => agent.mode === "car"),
-    [agents],
-  );
-  const freight = useMemo(
-    () => agents.filter((agent) => agent.mode === "freight"),
-    [agents],
-  );
-  const transit = useMemo(
-    () => agents.filter((agent) => agent.mode === "transit"),
+  const roadVehicles = useMemo(
+    () =>
+      agents.filter(
+        (agent) =>
+          agent.mode === "car" ||
+          agent.mode === "freight" ||
+          agent.mode === "transit",
+      ),
     [agents],
   );
   const pedestrians = useMemo(
@@ -3967,25 +3974,10 @@ function SemanticMobility({
 
   return (
     <group name="semantic-mobility">
+      <AmbientMobilityDiagnostics plan={plan} playing={playing} />
       <VehicleFleet
-        agents={cars}
-        kind="car"
-        opacity={opacity}
-        playing={playing}
-        speedScale={speedScale}
-        visible={showTraffic}
-      />
-      <VehicleFleet
-        agents={freight}
-        kind="freight"
-        opacity={opacity}
-        playing={playing}
-        speedScale={speedScale}
-        visible={showTraffic}
-      />
-      <VehicleFleet
-        agents={transit}
-        kind="transit"
+        agents={roadVehicles}
+        night={paletteNight}
         opacity={opacity}
         playing={playing}
         speedScale={speedScale}
@@ -3993,6 +3985,7 @@ function SemanticMobility({
       />
       <PedestrianFleet
         agents={pedestrians}
+        night={paletteNight}
         opacity={opacity}
         playing={playing}
         speedScale={speedScale}
@@ -4000,6 +3993,7 @@ function SemanticMobility({
       />
       <BoatFleet
         agents={boats}
+        night={paletteNight}
         opacity={opacity}
         playing={playing}
         speedScale={speedScale}
@@ -4009,110 +4003,86 @@ function SemanticMobility({
   );
 }
 
+function AmbientMobilityDiagnostics({
+  plan,
+  playing,
+}: {
+  plan: AmbientMobilityPlan | null;
+  playing: boolean;
+}) {
+  return (
+    <Html style={{ display: "none" }}>
+      <output
+        aria-hidden="true"
+        data-ambient-boat-count={plan?.diagnostics.boatCount ?? 0}
+        data-ambient-classification={plan?.classification ?? "none"}
+        data-ambient-pedestrian-count={plan?.diagnostics.pedestrianCount ?? 0}
+        data-ambient-plan-bytes={plan?.diagnostics.serializedBytes ?? 0}
+        data-ambient-playing={playing ? "true" : "false"}
+        data-ambient-route-count={
+          (plan?.diagnostics.roadRouteCount ?? 0) +
+          (plan?.diagnostics.pedestrianRouteCount ?? 0) +
+          (plan?.diagnostics.waterRouteCount ?? 0)
+        }
+        data-ambient-vehicle-count={plan?.diagnostics.vehicleCount ?? 0}
+        data-repocity-ambient-diagnostics
+      />
+    </Html>
+  );
+}
+
 function makeMotionAgents(
-  routes: readonly SemanticMobilityRoute[],
+  plan: AmbientMobilityPlan | null,
   roadSamples: readonly RoadSurfaceSample[],
 ): MotionAgent[] {
-  const agents: MotionAgent[] = [];
+  if (!plan) return [];
+  const routes = [
+    ...plan.roadRoutes,
+    ...plan.pedestrianRoutes,
+    ...plan.waterRoutes,
+  ];
+  const preparedRoutes = new Map<string, PreparedMotionRoute>();
   for (const route of routes) {
     if (route.points.length < 2) continue;
-    const routePoints: THREE.Vector3[] = [];
-    for (const point of route.points) {
-      const routePoint = new THREE.Vector3(
-        point.x,
-        route.mode === "boat"
-          ? WATER_Y + 0.13
-          : route.mode === "pedestrian"
-            ? CAMPUS_BASE_Y + 0.02
-            : nearestRoadSurfaceY(point.x, point.z, roadSamples),
-        point.z,
-      );
-      const previous = routePoints.at(-1);
-      if (previous && previous.distanceToSquared(routePoint) < 0.000001) {
-        continue;
-      }
-      routePoints.push(routePoint);
-    }
-    if (routePoints.length < 2) continue;
-    const curve = makeSegmentedMotionCurve(routePoints);
-    const prepared: PreparedMotionRoute = {
+    const motion = prepareAmbientMotionRoute(route);
+    if (!motion) continue;
+    preparedRoutes.set(route.id, {
       id: route.id,
-      mode: route.mode,
-      curve,
-      weight: route.weight,
-      closed: false,
-      length: Math.max(0.01, curve.getLength()),
-    };
-    const desired = explicitAgentCount(route.weight);
-    for (let index = 0; index < desired; index += 1) {
-      const seed = stableCityHash(`${route.id}:${route.mode}:${index}`);
-      agents.push({
-        id: `${route.id}:${index}`,
-        mode: route.mode,
-        route: prepared,
-        phase: ((seed >>> 5) % 1000) / 1000,
-        speed: motionSpeed(route.mode, seed),
-        laneOffset:
-          route.mode === "pedestrian"
-            ? (((seed >>> 13) % 100) / 100 - 0.5) * 0.38
-            : route.mode === "boat"
-              ? (((seed >>> 13) % 100) / 100 - 0.5) * 0.55
-              : index % 2 === 0
-                ? -0.34
-                : 0.34,
-        color: agentColor(route.mode, seed),
-        scale: 0.86 + ((seed >>> 17) % 25) / 100,
-      });
-    }
+      motion,
+      surfaceY:
+        route.kind === "water"
+          ? "water"
+          : route.kind === "road" ||
+              route.points.some((candidate) => candidate.surface === "bridge-walk")
+            ? "road"
+            : "ground",
+      roadSamples,
+    });
   }
-  return agents;
+  return plan.agents.flatMap((agent) => {
+    const route = preparedRoutes.get(agent.routeId);
+    if (!route) return [];
+    return [
+      {
+        id: agent.id,
+        mode: agent.mode,
+        route,
+        phase: agent.phase,
+        speed: agent.speed,
+        delay: agent.delay,
+        dwellSeconds: agent.dwellSeconds,
+        lateralOffset:
+          agent.mode === "pedestrian"
+            ? ((agent.colorVariant % 3) - 1) * 0.11
+            : 0,
+        color: agentColor(agent.mode, agent.colorVariant),
+        scale: agent.scale,
+      },
+    ];
+  });
 }
 
-/**
- * Keeps visible agents identical to the scenario fact. A route with weight N
- * produces exactly N instances; no ambient baseline or logarithmic inflation.
- */
-function explicitAgentCount(weight: number): number {
-  if (!Number.isSafeInteger(weight) || weight <= 0) return 0;
-  return weight;
-}
-
-/**
- * Motion follows the semantic polyline exactly. Catmull-Rom interpolation
- * rounds corners outside narrow roads, so every adjacent pair is a LineCurve3.
- */
-function makeSegmentedMotionCurve(
-  points: readonly THREE.Vector3[],
-): THREE.CurvePath<THREE.Vector3> {
-  const path = new THREE.CurvePath<THREE.Vector3>();
-  for (let index = 1; index < points.length; index += 1) {
-    path.add(
-      new THREE.LineCurve3(
-        points[index - 1]!.clone(),
-        points[index]!.clone(),
-      ),
-    );
-  }
-  return path;
-}
-
-function motionSpeed(mode: MobilityMode, seed: number): number {
-  const variation = ((seed >>> 9) % 17) / 1000;
-  switch (mode) {
-    case "pedestrian":
-      return 0.022 + variation * 0.5;
-    case "boat":
-      return 0.018 + variation * 0.35;
-    case "transit":
-      return 0.027 + variation * 0.4;
-    case "freight":
-      return 0.024 + variation * 0.35;
-    case "car":
-      return 0.034 + variation;
-  }
-}
-
-function agentColor(mode: MobilityMode, seed: number): string {
+function agentColor(mode: MobilityMode, variant: number): string {
   const palettes: Record<MobilityMode, readonly string[]> = {
     car: ["#dc624f", "#e2b84e", "#6091c7", "#d8ddd5", "#6b9678"],
     freight: ["#e09555", "#c96b55", "#7393a2"],
@@ -4121,7 +4091,7 @@ function agentColor(mode: MobilityMode, seed: number): string {
     boat: ["#d3634c", "#e2b65c", "#6f9eb1"],
   };
   const palette = palettes[mode];
-  return palette[seed % palette.length]!;
+  return palette[variant % palette.length]!;
 }
 
 function nearestRoadSurfaceY(
@@ -4141,16 +4111,22 @@ function nearestRoadSurfaceY(
   return y + 0.02;
 }
 
+const VEHICLE_DIMENSIONS = {
+  car: { width: 0.52, height: 0.24, length: 1.02 },
+  freight: { width: 0.64, height: 0.4, length: 1.62 },
+  transit: { width: 0.66, height: 0.46, length: 1.92 },
+} as const;
+
 function VehicleFleet({
   agents,
-  kind,
+  night,
   opacity,
   playing,
   speedScale,
   visible,
 }: {
   agents: readonly MotionAgent[];
-  kind: "car" | "freight" | "transit";
+  night: number;
   opacity: number;
   playing: boolean;
   speedScale: number;
@@ -4158,28 +4134,27 @@ function VehicleFleet({
 }) {
   const bodyRef = useRef<THREE.InstancedMesh>(null);
   const cabinRef = useRef<THREE.InstancedMesh>(null);
+  const headlightRef = useRef<THREE.InstancedMesh>(null);
+  const tailLightRef = useRef<THREE.InstancedMesh>(null);
   const timeRef = useRef(0);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const position = useMemo(() => new THREE.Vector3(), []);
   const tangent = useMemo(() => new THREE.Vector3(), []);
   const color = useMemo(() => new THREE.Color(), []);
-  const dimensions =
-    kind === "car"
-      ? { width: 0.44, height: 0.2, length: 0.82 }
-      : kind === "freight"
-        ? { width: 0.58, height: 0.36, length: 1.45 }
-        : { width: 0.58, height: 0.42, length: 1.72 };
-
   useFrame((_, delta) => {
     const body = bodyRef.current;
     const cabin = cabinRef.current;
-    if (!body || !cabin || !visible) return;
+    const headlights = headlightRef.current;
+    const tailLights = tailLightRef.current;
+    if (!body || !cabin || !headlights || !tailLights || !visible) return;
     if (playing) timeRef.current += delta * speedScale;
     for (let index = 0; index < agents.length; index += 1) {
       const agent = agents[index]!;
+      const kind = agent.mode as "car" | "freight" | "transit";
+      const dimensions = VEHICLE_DIMENSIONS[kind];
       sampleMotionAgent(agent, timeRef.current, position, tangent);
-      const sideX = -tangent.z * agent.laneOffset;
-      const sideZ = tangent.x * agent.laneOffset;
+      const sideX = -tangent.z * agent.lateralOffset;
+      const sideZ = tangent.x * agent.lateralOffset;
       const rotationY = Math.atan2(tangent.x, tangent.z);
       const scale = agent.scale;
       dummy.position.set(
@@ -4212,9 +4187,31 @@ function VehicleFleet({
       );
       dummy.updateMatrix();
       cabin.setMatrixAt(index, dummy.matrix);
+
+      for (let light = 0; light < 2; light += 1) {
+        const lateral = (light === 0 ? -1 : 1) * dimensions.width * scale * 0.3;
+        const forward = dimensions.length * scale * 0.49;
+        dummy.position.set(
+          position.x + sideX + tangent.x * forward - tangent.z * lateral,
+          position.y + dimensions.height * scale * 0.7,
+          position.z + sideZ + tangent.z * forward + tangent.x * lateral,
+        );
+        dummy.scale.set(0.07, 0.06, 0.035);
+        dummy.updateMatrix();
+        headlights.setMatrixAt(index * 2 + light, dummy.matrix);
+
+        dummy.position.set(
+          position.x + sideX - tangent.x * forward - tangent.z * lateral,
+          position.y + dimensions.height * scale * 0.68,
+          position.z + sideZ - tangent.z * forward + tangent.x * lateral,
+        );
+        dummy.updateMatrix();
+        tailLights.setMatrixAt(index * 2 + light, dummy.matrix);
+      }
     }
-    body.instanceMatrix.needsUpdate = true;
-    cabin.instanceMatrix.needsUpdate = true;
+    for (const mesh of [body, cabin, headlights, tailLights]) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
     if (body.instanceColor) body.instanceColor.needsUpdate = true;
   });
 
@@ -4244,25 +4241,55 @@ function VehicleFleet({
       >
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
-          color={kind === "transit" ? "#d8e0dc" : "#263b42"}
+          color="#2b4349"
           metalness={0.3}
           opacity={opacity}
           roughness={0.34}
           transparent={opacity < 1}
         />
       </instancedMesh>
+      <group visible={night > 0.08}>
+        <instancedMesh
+          ref={headlightRef}
+          args={[undefined, undefined, agents.length * 2]}
+          frustumCulled={false}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial
+            color="#fff1b3"
+            opacity={(0.4 + night * 0.6) * opacity}
+            toneMapped={false}
+            transparent
+          />
+        </instancedMesh>
+        <instancedMesh
+          ref={tailLightRef}
+          args={[undefined, undefined, agents.length * 2]}
+          frustumCulled={false}
+        >
+          <boxGeometry args={[1, 1, 1]} />
+          <meshBasicMaterial
+            color="#ff5b42"
+            opacity={(0.32 + night * 0.68) * opacity}
+            toneMapped={false}
+            transparent
+          />
+        </instancedMesh>
+      </group>
     </group>
   );
 }
 
 function PedestrianFleet({
   agents,
+  night,
   opacity,
   playing,
   speedScale,
   visible,
 }: {
   agents: readonly MotionAgent[];
+  night: number;
   opacity: number;
   playing: boolean;
   speedScale: number;
@@ -4284,17 +4311,17 @@ function PedestrianFleet({
     for (let index = 0; index < agents.length; index += 1) {
       const agent = agents[index]!;
       sampleMotionAgent(agent, timeRef.current, position, tangent);
-      const sideX = -tangent.z * agent.laneOffset;
-      const sideZ = tangent.x * agent.laneOffset;
+      const sideX = -tangent.z * agent.lateralOffset;
+      const sideZ = tangent.x * agent.lateralOffset;
       const stride = Math.sin(timeRef.current * 8 + agent.phase * 20) * 0.018;
       const rotationY = Math.atan2(tangent.x, tangent.z);
       dummy.position.set(
         position.x + sideX,
-        position.y + 0.2 + stride,
+        position.y + 0.24 + stride,
         position.z + sideZ,
       );
       dummy.rotation.set(0, rotationY, 0);
-      dummy.scale.set(0.085, 0.34, 0.085);
+      dummy.scale.set(0.065, 0.11, 0.065);
       dummy.updateMatrix();
       bodies.setMatrixAt(index, dummy.matrix);
       color.set(agent.color);
@@ -4302,11 +4329,11 @@ function PedestrianFleet({
 
       dummy.position.set(
         position.x + sideX,
-        position.y + 0.43 + stride,
+        position.y + 0.52 + stride,
         position.z + sideZ,
       );
       dummy.rotation.set(0, 0, 0);
-      dummy.scale.setScalar(0.11);
+      dummy.scale.setScalar(0.09);
       dummy.updateMatrix();
       heads.setMatrixAt(index, dummy.matrix);
     }
@@ -4325,7 +4352,13 @@ function PedestrianFleet({
         frustumCulled={false}
       >
         <capsuleGeometry args={[1, 2, 4, 7]} />
-        <meshStandardMaterial color="#ffffff" opacity={opacity} transparent={opacity < 1} />
+        <meshStandardMaterial
+          color="#ffffff"
+          emissive="#4a4f4c"
+          emissiveIntensity={night * 0.42}
+          opacity={opacity}
+          transparent={opacity < 1}
+        />
       </instancedMesh>
       <instancedMesh
         ref={headRef}
@@ -4342,12 +4375,14 @@ function PedestrianFleet({
 
 function BoatFleet({
   agents,
+  night,
   opacity,
   playing,
   speedScale,
   visible,
 }: {
   agents: readonly MotionAgent[];
+  night: number;
   opacity: number;
   playing: boolean;
   speedScale: number;
@@ -4356,6 +4391,7 @@ function BoatFleet({
   const hullRef = useRef<THREE.InstancedMesh>(null);
   const cabinRef = useRef<THREE.InstancedMesh>(null);
   const wakeRef = useRef<THREE.InstancedMesh>(null);
+  const navigationLightRef = useRef<THREE.InstancedMesh>(null);
   const timeRef = useRef(0);
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const position = useMemo(() => new THREE.Vector3(), []);
@@ -4366,13 +4402,14 @@ function BoatFleet({
     const hulls = hullRef.current;
     const cabins = cabinRef.current;
     const wakes = wakeRef.current;
-    if (!hulls || !cabins || !wakes || !visible) return;
+    const navigationLights = navigationLightRef.current;
+    if (!hulls || !cabins || !wakes || !navigationLights || !visible) return;
     if (playing) timeRef.current += delta * speedScale;
     for (let index = 0; index < agents.length; index += 1) {
       const agent = agents[index]!;
       sampleMotionAgent(agent, timeRef.current, position, tangent);
-      const sideX = -tangent.z * agent.laneOffset;
-      const sideZ = tangent.x * agent.laneOffset;
+      const sideX = -tangent.z * agent.lateralOffset;
+      const sideZ = tangent.x * agent.lateralOffset;
       const rotationY = Math.atan2(tangent.x, tangent.z);
       const bob = Math.sin(timeRef.current * 2 + agent.phase * 11) * 0.025;
       dummy.position.set(
@@ -4405,10 +4442,20 @@ function BoatFleet({
       dummy.scale.set(0.68, 1.7, 1);
       dummy.updateMatrix();
       wakes.setMatrixAt(index, dummy.matrix);
+
+      dummy.position.set(
+        position.x + sideX + tangent.x * 0.2,
+        position.y + 0.62 + bob,
+        position.z + sideZ + tangent.z * 0.2,
+      );
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(0.075);
+      dummy.updateMatrix();
+      navigationLights.setMatrixAt(index, dummy.matrix);
     }
-    hulls.instanceMatrix.needsUpdate = true;
-    cabins.instanceMatrix.needsUpdate = true;
-    wakes.instanceMatrix.needsUpdate = true;
+    for (const mesh of [hulls, cabins, wakes, navigationLights]) {
+      mesh.instanceMatrix.needsUpdate = true;
+    }
     if (hulls.instanceColor) hulls.instanceColor.needsUpdate = true;
   });
 
@@ -4443,12 +4490,27 @@ function BoatFleet({
         ref={wakeRef}
         args={[undefined, undefined, agents.length]}
         frustumCulled={false}
+        visible={playing}
       >
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
           color="#b7e2d9"
           depthWrite={false}
           opacity={0.34 * opacity}
+          toneMapped={false}
+          transparent
+        />
+      </instancedMesh>
+      <instancedMesh
+        ref={navigationLightRef}
+        args={[undefined, undefined, agents.length]}
+        frustumCulled={false}
+        visible={night > 0.08}
+      >
+        <sphereGeometry args={[1, 7, 5]} />
+        <meshBasicMaterial
+          color="#b5ffe6"
+          opacity={(0.38 + night * 0.62) * opacity}
           toneMapped={false}
           transparent
         />
@@ -4463,12 +4525,24 @@ function sampleMotionAgent(
   positionTarget: THREE.Vector3,
   tangentTarget: THREE.Vector3,
 ) {
-  const raw = (agent.phase + elapsed * agent.speed) % 1;
-  const progress = raw < 0.5 ? raw * 2 : (1 - raw) * 2;
-  const direction = raw < 0.5 ? 1 : -1;
-  agent.route.curve.getPointAt(progress, positionTarget);
-  agent.route.curve.getTangentAt(progress, tangentTarget);
-  tangentTarget.multiplyScalar(direction).normalize();
+  sampleAmbientAgentInto(
+    agent.route.motion,
+    agent,
+    elapsed,
+    positionTarget,
+    tangentTarget,
+  );
+  positionTarget.y =
+    agent.route.surfaceY === "water"
+      ? WATER_Y + 0.13
+      : agent.route.surfaceY === "road"
+        ? nearestRoadSurfaceY(
+            positionTarget.x,
+            positionTarget.z,
+            agent.route.roadSamples,
+          ) + (agent.mode === "pedestrian" ? 0.06 : 0)
+        : CAMPUS_BASE_Y + 0.02;
+  tangentTarget.y = 0;
 }
 
 function StaticBoxInstances({
