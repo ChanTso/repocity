@@ -4,7 +4,17 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 
 ## [Unreleased]
 
-- No committed post-alpha roadmap or release schedule.
+### Added
+
+- Dedicated semantic Map mode with component ownership, building envelopes, stable addresses, deterministic labels, and repository-to-symbol breadcrumbs.
+- Inspector placement explanations, semantic search navigation, and focused one-hop relationship evidence.
+- Explicit City Context / Semantic Ownership / Static Relationship / Evidence Journey / Replay Event legend.
+
+### Changed
+
+- Flow retains a reduced deterministic ambient cohort instead of presenting an empty city; ambient traffic remains explicitly non-semantic and non-telemetric.
+
+This section describes an unmerged development candidate and does not announce a v0.2 release or schedule.
 
 ## [0.1.0-alpha.2] — 2026-08-02
 

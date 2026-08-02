@@ -18,9 +18,14 @@ The underlying design reserves separate categories for observed runtime, test, a
 - Route legs are projected onto the semantic street/corridor graph.
 - A visible route links to relationship or rule explanations.
 - Moving journey tokens are visually distinct from ambient vehicles and pedestrians.
+- Deterministic ambient vehicles, pedestrians, and boats remain visible at reduced emphasis in Flow and never receive evidence trails, station labels, or provenance interaction.
+- Pausing a journey freezes evidence tokens and route progression only; ambient agents continue at the Flow profile speed. `prefers-reduced-motion` explicitly freezes both motion layers.
+- A persistent `○ Ambient context / ◆ Evidence journey` key states the distinction without requiring settings.
 - Density, timing, and queues are explanatory simulation values unless explicitly documented otherwise.
 - Missing or unsupported evidence is shown as a limitation instead of being fabricated.
 
 The repository-pipeline journey explains how RepoCity analyzes and compiles a repository. The delivery journey demonstrates a supported artifact path across the visual city. Both remain deterministic for the same dataset.
+
+Ambient routes are derived once from compiled urban fabric and carry no evidence-relation IDs. They are city context, not a duplicate journey simulation and not observed telemetry.
 
 See [V3 Flow City specification](V3_FLOW_CITY_SPEC.md) for the longer design target and current boundary.

@@ -17,4 +17,19 @@ Outer districts intentionally use simpler level-of-detail forms. The public alph
 - Product screenshots must be real captures without browser chrome, private information, debug overlays, or generated replacement scenery.
 - Visual contributions must record origin, license, attribution, checksum, and semantic classification.
 
+## Semantic Lens modes
+
+| Mode | Dominant layer | Secondary context |
+| --- | --- | --- |
+| Explore | normal city materials and configured ambient life | minimal active-selection semantics |
+| Map | component ownership, building envelopes, addresses, labels, optional one-hop relations | desaturated city and reduced ambient life |
+| Flow | evidence route, stations, tokens, stage and provenance | reduced ambient life and semantic destination |
+| Replay | Git event and changed-entity state | stable semantic ownership and reduced ambient life |
+
+Semantic labels use a deterministic priority cap of 12 and are generated once per selection/mode change. Static relations are thin, non-emissive dashed lines; evidence journeys retain their routed, emissive, animated language. Ambient implementation paths are never shown.
+
+Selected file/building labels outrank unselected component labels, and product HUD panels render above the WebGL canvas. General screen-space label collision avoidance is not implemented; dense world-space angles may still overlap and remain a future improvement.
+
+Mode saturation and brightness use a CSS filter on the complete WebGL canvas. The filter therefore affects city geometry, semantic overlays, journeys, and replay geometry together; it is not an independently selective “city-only” treatment. Ambient opacity/speed and semantic/relation opacity are renderer-level layer controls. Mode switches preserve the current camera, while the Map overview button and review-camera key `6` apply the public-alpha overview explicitly.
+
 See [the asset manifest](assets/city-kit-v1-manifest.md), [V4.2 asset strategy](VISUAL_CITY_V4_2.md), and [V4.3 street-reality pass](VISUAL_CITY_V4_3.md).
