@@ -168,6 +168,10 @@ export interface SemanticMetropolisProps {
   showTraffic?: boolean;
   showPedestrians?: boolean;
   showWaterTraffic?: boolean;
+  /** Visual weight for deterministic ambient context, never evidence. */
+  ambientOpacity?: number;
+  /** Motion multiplier used to subordinate ambient context by mode. */
+  ambientSpeedScale?: number;
   selectedEntityId?: string | null;
   /** Freezes semantic traffic without rebuilding any scene objects. */
   playing?: boolean;
@@ -194,6 +198,8 @@ export function SemanticMetropolis({
   showTraffic = true,
   showPedestrians = true,
   showWaterTraffic = true,
+  ambientOpacity = 1,
+  ambientSpeedScale = 1,
   selectedEntityId = null,
   playing = true,
   onHoverEntity,
@@ -496,12 +502,14 @@ export function SemanticMetropolis({
       />
 
       <SemanticMobility
+        opacity={ambientOpacity}
         routes={mobilityRoutes}
         playing={playing}
         roadSamples={roadGeometry.surfaceSamples}
         showPedestrians={showPedestrians}
         showTraffic={showTraffic}
         showWaterTraffic={showWaterTraffic}
+        speedScale={ambientSpeedScale}
       />
     </group>
   );
@@ -3917,6 +3925,8 @@ function SemanticMobility({
   routes,
   roadSamples,
   playing,
+  opacity,
+  speedScale,
   showTraffic,
   showPedestrians,
   showWaterTraffic,
@@ -3924,6 +3934,8 @@ function SemanticMobility({
   routes: readonly SemanticMobilityRoute[];
   roadSamples: readonly RoadSurfaceSample[];
   playing: boolean;
+  opacity: number;
+  speedScale: number;
   showTraffic: boolean;
   showPedestrians: boolean;
   showWaterTraffic: boolean;
@@ -3958,29 +3970,39 @@ function SemanticMobility({
       <VehicleFleet
         agents={cars}
         kind="car"
+        opacity={opacity}
         playing={playing}
+        speedScale={speedScale}
         visible={showTraffic}
       />
       <VehicleFleet
         agents={freight}
         kind="freight"
+        opacity={opacity}
         playing={playing}
+        speedScale={speedScale}
         visible={showTraffic}
       />
       <VehicleFleet
         agents={transit}
         kind="transit"
+        opacity={opacity}
         playing={playing}
+        speedScale={speedScale}
         visible={showTraffic}
       />
       <PedestrianFleet
         agents={pedestrians}
+        opacity={opacity}
         playing={playing}
+        speedScale={speedScale}
         visible={showPedestrians}
       />
       <BoatFleet
         agents={boats}
+        opacity={opacity}
         playing={playing}
+        speedScale={speedScale}
         visible={showWaterTraffic}
       />
     </group>
@@ -4122,12 +4144,16 @@ function nearestRoadSurfaceY(
 function VehicleFleet({
   agents,
   kind,
+  opacity,
   playing,
+  speedScale,
   visible,
 }: {
   agents: readonly MotionAgent[];
   kind: "car" | "freight" | "transit";
+  opacity: number;
   playing: boolean;
+  speedScale: number;
   visible: boolean;
 }) {
   const bodyRef = useRef<THREE.InstancedMesh>(null);
@@ -4148,7 +4174,7 @@ function VehicleFleet({
     const body = bodyRef.current;
     const cabin = cabinRef.current;
     if (!body || !cabin || !visible) return;
-    if (playing) timeRef.current += delta;
+    if (playing) timeRef.current += delta * speedScale;
     for (let index = 0; index < agents.length; index += 1) {
       const agent = agents[index]!;
       sampleMotionAgent(agent, timeRef.current, position, tangent);
@@ -4205,7 +4231,9 @@ function VehicleFleet({
         <meshStandardMaterial
           color="#ffffff"
           metalness={0.3}
+          opacity={opacity}
           roughness={0.46}
+          transparent={opacity < 1}
         />
       </instancedMesh>
       <instancedMesh
@@ -4218,7 +4246,9 @@ function VehicleFleet({
         <meshStandardMaterial
           color={kind === "transit" ? "#d8e0dc" : "#263b42"}
           metalness={0.3}
+          opacity={opacity}
           roughness={0.34}
+          transparent={opacity < 1}
         />
       </instancedMesh>
     </group>
@@ -4227,11 +4257,15 @@ function VehicleFleet({
 
 function PedestrianFleet({
   agents,
+  opacity,
   playing,
+  speedScale,
   visible,
 }: {
   agents: readonly MotionAgent[];
+  opacity: number;
   playing: boolean;
+  speedScale: number;
   visible: boolean;
 }) {
   const bodyRef = useRef<THREE.InstancedMesh>(null);
@@ -4246,7 +4280,7 @@ function PedestrianFleet({
     const bodies = bodyRef.current;
     const heads = headRef.current;
     if (!bodies || !heads || !visible) return;
-    if (playing) timeRef.current += delta;
+    if (playing) timeRef.current += delta * speedScale;
     for (let index = 0; index < agents.length; index += 1) {
       const agent = agents[index]!;
       sampleMotionAgent(agent, timeRef.current, position, tangent);
@@ -4291,7 +4325,7 @@ function PedestrianFleet({
         frustumCulled={false}
       >
         <capsuleGeometry args={[1, 2, 4, 7]} />
-        <meshStandardMaterial color="#ffffff" />
+        <meshStandardMaterial color="#ffffff" opacity={opacity} transparent={opacity < 1} />
       </instancedMesh>
       <instancedMesh
         ref={headRef}
@@ -4300,7 +4334,7 @@ function PedestrianFleet({
         frustumCulled={false}
       >
         <sphereGeometry args={[1, 8, 6]} />
-        <meshStandardMaterial color="#d4aa89" roughness={0.9} />
+        <meshStandardMaterial color="#d4aa89" opacity={opacity} roughness={0.9} transparent={opacity < 1} />
       </instancedMesh>
     </group>
   );
@@ -4308,11 +4342,15 @@ function PedestrianFleet({
 
 function BoatFleet({
   agents,
+  opacity,
   playing,
+  speedScale,
   visible,
 }: {
   agents: readonly MotionAgent[];
+  opacity: number;
   playing: boolean;
+  speedScale: number;
   visible: boolean;
 }) {
   const hullRef = useRef<THREE.InstancedMesh>(null);
@@ -4329,7 +4367,7 @@ function BoatFleet({
     const cabins = cabinRef.current;
     const wakes = wakeRef.current;
     if (!hulls || !cabins || !wakes || !visible) return;
-    if (playing) timeRef.current += delta;
+    if (playing) timeRef.current += delta * speedScale;
     for (let index = 0; index < agents.length; index += 1) {
       const agent = agents[index]!;
       sampleMotionAgent(agent, timeRef.current, position, tangent);
@@ -4384,7 +4422,7 @@ function BoatFleet({
         frustumCulled={false}
       >
         <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#ffffff" roughness={0.64} />
+        <meshStandardMaterial color="#ffffff" opacity={opacity} roughness={0.64} transparent={opacity < 1} />
       </instancedMesh>
       <instancedMesh
         ref={cabinRef}
@@ -4396,7 +4434,9 @@ function BoatFleet({
         <meshStandardMaterial
           color="#dce4df"
           metalness={0.08}
+          opacity={opacity}
           roughness={0.46}
+          transparent={opacity < 1}
         />
       </instancedMesh>
       <instancedMesh
@@ -4408,7 +4448,7 @@ function BoatFleet({
         <meshBasicMaterial
           color="#b7e2d9"
           depthWrite={false}
-          opacity={0.34}
+          opacity={0.34 * opacity}
           toneMapped={false}
           transparent
         />

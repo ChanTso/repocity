@@ -49,7 +49,15 @@ import {
   type PlannedBuilding,
 } from "@/app/lib/living-city";
 import type { SemanticFlowProjection } from "@/app/lib/semantic-flow";
-import type { SemanticCityPlan } from "@/app/lib/semantic-city";
+import type {
+  SemanticCityPlan,
+  SemanticMobilityRoute,
+} from "@/app/lib/semantic-city";
+import type {
+  CityVisualProfile,
+  SemanticLabel,
+  SemanticRelationOverlay,
+} from "@/app/lib/semantic-lens";
 import {
   projectUrbanJourneyLeg,
   type UrbanFabricPlan,
@@ -71,6 +79,7 @@ import {
 import { LivingCityInfrastructure } from "./city/LivingCityInfrastructure";
 import { LivingCityMobility } from "./city/LivingCityMobility";
 import { SemanticMetropolis } from "./city/SemanticMetropolis";
+import { SemanticLensLayer } from "./city/SemanticLensLayer";
 import {
   BLOCK_TOP_Y,
   BUILDING_BASE_Y,
@@ -84,8 +93,6 @@ export type CitySceneEntity = CityVisualEntity;
 export type CitySceneRelation = CityVisualRelation;
 export type CitySceneDistrict = CityDistrictInput;
 export type CitySceneEntityFrameState = CityEntityFrameState;
-
-const NO_SEMANTIC_MOBILITY = [] as const;
 
 export interface CitySceneProps {
   /** Stable, all-history entities. Planning never uses replay-filtered arrays. */
@@ -124,6 +131,14 @@ export interface CitySceneProps {
   showTraffic?: boolean;
   showPedestrians?: boolean;
   showWaterTraffic?: boolean;
+  semanticProfile?: CityVisualProfile;
+  semanticMode?: CityVisualProfile["mode"];
+  semanticLabels?: readonly SemanticLabel[];
+  semanticRelations?: readonly SemanticRelationOverlay[];
+  ambientMobilityRoutes?: readonly SemanticMobilityRoute[];
+  selectedComponentId?: string | null;
+  onSelectComponent?: (componentId: string) => void;
+  onSelectSemanticRelation?: (relationId: string) => void;
   flowJourney?: FlowJourneyView | null;
   flowFollow?: boolean;
   flowStepIndex?: number;
@@ -174,6 +189,14 @@ export function CityScene({
   showTraffic = true,
   showPedestrians = true,
   showWaterTraffic = true,
+  semanticProfile,
+  semanticMode,
+  semanticLabels = [],
+  semanticRelations = [],
+  ambientMobilityRoutes = [],
+  selectedComponentId = null,
+  onSelectComponent,
+  onSelectSemanticRelation,
   flowJourney = null,
   flowFollow = false,
   flowStepIndex = 0,
@@ -417,6 +440,14 @@ export function CityScene({
           urbanFabricPlan={urbanFabricPlan}
           visualCityPlan={visualCityPlan}
           semanticFlowProjection={semanticFlowProjection}
+          semanticLabels={semanticLabels}
+          semanticMode={semanticMode}
+          semanticProfile={semanticProfile}
+          semanticRelations={semanticRelations}
+          ambientMobilityRoutes={ambientMobilityRoutes}
+          selectedComponentId={selectedComponentId}
+          onSelectComponent={onSelectComponent}
+          onSelectSemanticRelation={onSelectSemanticRelation}
           pulseSignature={pulseSignature}
           relations={relations}
           selectedEntityId={selectedEntityId ?? null}
@@ -440,6 +471,12 @@ interface SceneContentsProps {
   urbanFabricPlan?: UrbanFabricPlan;
   visualCityPlan?: VisualCityPlan;
   semanticFlowProjection?: SemanticFlowProjection | null;
+  semanticProfile?: CityVisualProfile;
+  semanticMode?: CityVisualProfile["mode"];
+  semanticLabels: readonly SemanticLabel[];
+  semanticRelations: readonly SemanticRelationOverlay[];
+  ambientMobilityRoutes: readonly SemanticMobilityRoute[];
+  selectedComponentId?: string | null;
   bounds: LivingCityRenderBounds;
   entities: readonly CitySceneEntity[];
   relations: readonly CitySceneRelation[];
@@ -468,6 +505,8 @@ interface SceneContentsProps {
   onHoverEntity: (entityId: string | null) => void;
   onSelectEntity: (entityId: string) => void;
   onFocusEntity: (entityId: string) => void;
+  onSelectComponent?: (componentId: string) => void;
+  onSelectSemanticRelation?: (relationId: string) => void;
 }
 
 interface JourneyCameraFocus {
@@ -568,6 +607,12 @@ function SceneContents({
   urbanFabricPlan,
   visualCityPlan,
   semanticFlowProjection,
+  semanticProfile,
+  semanticMode,
+  semanticLabels,
+  semanticRelations,
+  ambientMobilityRoutes,
+  selectedComponentId,
   bounds,
   entities,
   relations,
@@ -596,6 +641,8 @@ function SceneContents({
   onHoverEntity,
   onSelectEntity,
   onFocusEntity,
+  onSelectComponent,
+  onSelectSemanticRelation,
 }: SceneContentsProps) {
   const palette = useMemo(
     () => getTimeOfDayPalette(timeOfDay),
@@ -952,16 +999,16 @@ function SceneContents({
       {semanticCityPlan && urbanFabricPlan ? (
         <SemanticMetropolis
           activeComponentIds={flowComponentIds}
-          // FlowJourneyLayer is the single renderer for scenario tokens.
-          // Keeping the metropolis fleet empty prevents the same observed
-          // token cohort from becoming an unexplained ambient population.
-          mobilityRoutes={NO_SEMANTIC_MOBILITY}
+          // These urban-fabric routes are ambient city context. They are kept
+          // visually subordinate to FlowJourneyLayer and never presented as
+          // observed traffic or journey evidence.
+          mobilityRoutes={ambientMobilityRoutes}
           plan={semanticCityPlan}
           urbanFabric={urbanFabricPlan}
           visualCity={visualCityPlan}
           onHoverEntity={onHoverEntity}
           onSelectEntity={onSelectEntity}
-          playing={flowPlaying}
+          playing={flowJourney ? flowPlaying : true}
           // Only the currently inspected cutaway owns physical space. Other
           // journey stops remain lightweight semantic beacons, so a ten-step
           // tour cannot hollow ten unrelated holes out of the metropolis.
@@ -970,6 +1017,8 @@ function SceneContents({
           showPedestrians
           showTraffic
           showWaterTraffic
+          ambientOpacity={semanticProfile?.ambientOpacity ?? 1}
+          ambientSpeedScale={semanticProfile?.ambientSpeedScale ?? 1}
           timeOfDay={timeOfDay}
         />
       ) : (
@@ -1004,6 +1053,21 @@ function SceneContents({
           />
         </>
       )}
+      {semanticCityPlan && urbanFabricPlan && semanticProfile ? (
+        <SemanticLensLayer
+          components={semanticCityPlan.components}
+          labels={semanticLabels}
+          onSelectComponent={onSelectComponent}
+          onSelectEntity={onSelectEntity}
+          onSelectRelation={onSelectSemanticRelation}
+          overlayOpacity={semanticProfile.semanticOverlayOpacity}
+          relationOpacity={semanticProfile.relationOpacity}
+          relations={semanticProfile.relationOpacity > 0 ? semanticRelations : []}
+          selectedComponentId={selectedComponentId}
+          selectedEntityId={selectedEntityId}
+          urbanFabric={urbanFabricPlan}
+        />
+      ) : null}
       {flowJourney ? (
         <FlowJourneyLayer
           activeStepIndex={flowStepIndex}
@@ -1072,6 +1136,7 @@ function SceneContents({
         targetHeight={targetHeight}
         urbanFabric={urbanFabricPlan}
         visualCity={visualCityPlan}
+        semanticMode={semanticMode}
       />
     </>
   );
@@ -1425,6 +1490,7 @@ function CameraRig({
   targetHeight,
   urbanFabric,
   visualCity,
+  semanticMode,
 }: {
   bounds: LivingCityRenderBounds;
   cityKey: string;
@@ -1438,6 +1504,7 @@ function CameraRig({
   targetHeight: (entityId: string) => number;
   urbanFabric?: UrbanFabricPlan;
   visualCity?: VisualCityPlan;
+  semanticMode?: CityVisualProfile["mode"];
 }) {
   const { camera } = useThree();
   const cameraAspect =
@@ -1497,25 +1564,38 @@ function CameraRig({
     focusingRef.current = false;
   }, [bounds, camera, cityKey, reviewPresets, visualCity]);
 
+  useEffect(() => {
+    if (semanticMode === "map") applyVisualBookmark("public-alpha-hero");
+  }, [applyVisualBookmark, semanticMode]);
+
   const beginFocus = useCallback(
     (
       entityId: string,
       framing: "building" | "district" | "journey" = "building",
     ) => {
-      const building = buildingByEntityId.get(entityId);
-      if (!building || !isRenderable(entityId)) return;
-      const focusHeight =
-        framing === "journey"
+      const legacyBuilding = buildingByEntityId.get(entityId);
+      const semanticAddress = urbanFabric?.entityAddresses[entityId];
+      const semanticBuilding = semanticAddress
+        ? urbanFabric?.buildings.find(
+            (candidate) => candidate.id === semanticAddress.buildingId,
+          )
+        : undefined;
+      if ((!legacyBuilding && !semanticBuilding) || !isRenderable(entityId)) return;
+      const focusHeight = semanticBuilding
+        ? semanticBuilding.height
+        : framing === "journey"
           ? Math.max(3.2, Math.min(5.2, targetHeight(entityId)))
           : Math.max(0.5, targetHeight(entityId));
+      const focusX = semanticBuilding?.x ?? legacyBuilding!.x;
+      const focusZ = semanticBuilding?.z ?? legacyBuilding!.z;
       const target = new THREE.Vector3(
-        building.x,
+        focusX,
         BUILDING_BASE_Y + focusHeight * 0.4,
-        building.z,
+        focusZ,
       );
       const focusSize = Math.max(
-        building.width,
-        building.depth,
+        semanticBuilding?.width ?? legacyBuilding!.width,
+        semanticBuilding?.depth ?? legacyBuilding!.depth,
         focusHeight * 0.7,
       );
       const distance =
@@ -1550,6 +1630,7 @@ function CameraRig({
       camera,
       isRenderable,
       targetHeight,
+      urbanFabric,
     ],
   );
   const beginFocusBounds = useCallback(

@@ -35,8 +35,11 @@ import {
   Users,
   X,
   Zap,
+  Building2,
+  CornerDownRight,
 } from "lucide-react";
 import {
+  type CSSProperties,
   FormEvent,
   useCallback,
   useEffect,
@@ -70,8 +73,23 @@ import { planFlowSimulation } from "../lib/flow-simulation";
 import { planUrbanFabric } from "../lib/urban-fabric";
 import { planVisualCity } from "../lib/visual-city";
 import { resolveViewerReplayFrame } from "../lib/viewer-replay";
+import {
+  resolveAmbientPresentation,
+  resolveAmbientMobilityRoutes,
+  resolveComponentSelection,
+  resolveModeVisualProfile,
+  resolveOneHopRelationshipOverlays,
+  resolvePlacementExplanation,
+  resolveSemanticAddress,
+  resolveSemanticBreadcrumb,
+  resolveSemanticSearchResults,
+  resolveVisibleSemanticLabels,
+  transitionSemanticLensMode,
+  type CityMode,
+  type RelationDirection,
+  type SemanticLensState,
+} from "../lib/semantic-lens";
 
-type Mode = "explore" | "journey" | "replay";
 type InspectorTab = "overview" | "relations" | "history";
 type TimePreset = "dawn" | "day" | "dusk" | "night";
 
@@ -292,6 +310,13 @@ function Inspector({
   project,
   activeRelationIds,
   visibleEntityIds,
+  placement,
+  relationDirection,
+  selectedRelationId,
+  selectedSymbol,
+  onRelationDirection,
+  onSelectRelation,
+  onSelectSymbol,
 }: {
   entity: DemoEntity;
   tab: InspectorTab;
@@ -303,6 +328,13 @@ function Inspector({
   project: ViewerProject;
   activeRelationIds: ReadonlySet<string>;
   visibleEntityIds: ReadonlySet<string>;
+  placement: ReturnType<typeof resolvePlacementExplanation>;
+  relationDirection: RelationDirection;
+  selectedRelationId?: string | null;
+  selectedSymbol?: string | null;
+  onRelationDirection: (direction: RelationDirection) => void;
+  onSelectRelation: (relationId: string) => void;
+  onSelectSymbol: (symbolName: string) => void;
 }) {
   const relations = useMemo(
     () =>
@@ -345,6 +377,12 @@ function Inspector({
       })),
     ]
       .filter((item) => {
+        if (relationDirection === "off") return false;
+        if (relationDirection === "incoming") return item.direction === "usedBy";
+        if (relationDirection === "outgoing") return item.direction === "uses";
+        return true;
+      })
+      .filter((item) => {
         if (
           !item.entity ||
           !visibleEntityIds.has(item.entity.id) ||
@@ -356,7 +394,16 @@ function Inspector({
         return true;
       })
       .slice(0, 8);
-  }, [project.entities, relations, visibleEntityIds]);
+  }, [project.entities, relationDirection, relations, visibleEntityIds]);
+  const selectedRelation = selectedRelationId
+    ? project.relations.find((relation) => relation.id === selectedRelationId)
+    : undefined;
+  const selectedRelationSource = selectedRelation
+    ? getEntityById(selectedRelation.sourceId, project.entities)
+    : undefined;
+  const selectedRelationTarget = selectedRelation
+    ? getEntityById(selectedRelation.targetId, project.entities)
+    : undefined;
 
   return (
     <div className="inspector-content">
@@ -465,7 +512,16 @@ function Inspector({
               {entity.exportNames.length ? (
                 entity.exportNames
                   .slice(0, 5)
-                  .map((name) => <code key={name}>{name}</code>)
+                  .map((name) => (
+                    <button
+                      type="button"
+                      className={selectedSymbol === name ? "active" : ""}
+                      key={name}
+                      onClick={() => onSelectSymbol(name)}
+                    >
+                      <code>{name}</code>
+                    </button>
+                  ))
               ) : (
                 <span className="no-symbol-names">
                   {entity.maxMetrics.exports
@@ -475,6 +531,26 @@ function Inspector({
               )}
             </div>
           </section>
+          {placement ? (
+            <section className="inspector-section placement-explanation">
+              <div className="section-label">
+                <MapIcon size={13} />
+                为什么在这里？
+              </div>
+              <div className="placement-address">
+                <strong>{placement.componentLabel}</strong>
+                <span>{placement.moduleLabel}</span>
+                <code>{placement.blockId}</code>
+              </div>
+              <p>{placement.groupingRule}</p>
+              <dl>
+                <div><dt>分组事实</dt><dd>{placement.fileCount} files · {placement.exportCount} exports</dd></div>
+                <div><dt>空间规则</dt><dd>{placement.placementRule}</dd></div>
+                <div><dt>依赖邻近</dt><dd>未用于建筑落位</dd></div>
+                <div><dt>来源</dt><dd>{placement.mappingKind}</dd></div>
+              </dl>
+            </section>
+          ) : null}
           <section className="inspector-section last-change">
             <div className="section-label">
               <GitCommitHorizontal size={13} />
@@ -501,12 +577,46 @@ function Inspector({
             <Network size={17} />
             当前只展开一阶关系，避免整座城市变成线团。
           </div>
+          <div className="relation-direction" role="group" aria-label="一阶关系方向">
+            {(
+              [
+                ["off", "关闭"],
+                ["incoming", "传入"],
+                ["outgoing", "传出"],
+                ["both", "双向"],
+              ] as const
+            ).map(([direction, label]) => (
+              <button
+                type="button"
+                className={relationDirection === direction ? "active" : ""}
+                key={direction}
+                onClick={() => onRelationDirection(direction)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {selectedRelation ? (
+            <div className="relation-evidence-card">
+              <strong>{selectedRelation.kind}</strong>
+              <span>权重 {selectedRelation.weight}</span>
+              <p>
+                {selectedRelationSource?.name ?? selectedRelation.sourceId}
+                {" → "}
+                {selectedRelationTarget?.name ?? selectedRelation.targetId}
+              </p>
+              <p>静态 import 边来自仓库分析 · repository fact · 非运行流量、非数据旅程</p>
+              <code>{selectedRelation.id}</code>
+            </div>
+          ) : null}
           {relatedEntities.map((item) => (
             <button
               type="button"
               className="relation-row"
               key={`${item.direction}-${item.entity?.id}`}
-              onClick={() => item.entity && onSelect(item.entity.id)}
+              onClick={() => onSelectRelation(item.relation.id)}
+              onDoubleClick={() => item.entity && onSelect(item.entity.id)}
+              title="单击查看关系证据；双击导航到关联文件"
             >
               <span
                 className="relation-role-dot"
@@ -593,13 +703,25 @@ function Inspector({
 export function RepoCityApp() {
   const [project, setProject] = useState<ViewerProject>(demoProject);
   const initialEntity = findInitialEntity(demoProject.entities);
-  const [mode, setMode] = useState<Mode>("explore");
   const [commitIndex, setCommitIndex] = useState(
     demoProject.commits.length - 1,
   );
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [selectedEntityId, setSelectedEntityId] = useState(initialEntity.id);
+  const [semanticLens, setSemanticLens] = useState<SemanticLensState>({
+    mode: "explore",
+    selection: { kind: "entity", entityId: initialEntity.id },
+    relationDirection: "off",
+    labelLevel: "auto",
+  });
+  const [selectedSymbol, setSelectedSymbol] = useState<string>();
+  const [selectedRelationId, setSelectedRelationId] = useState<string>();
+  const mode = semanticLens.mode;
+
+  function setMode(nextMode: CityMode) {
+    setSemanticLens((current) => transitionSemanticLensMode(current, nextMode));
+  }
   const [focusEntityId, setFocusEntityId] = useState<string>();
   const [inspectorTab, setInspectorTab] =
     useState<InspectorTab>("overview");
@@ -683,6 +805,10 @@ export function RepoCityApp() {
   const visualCityPlan = useMemo(
     () => planVisualCity({ semanticPlan: semanticCityPlan, urbanFabric: urbanFabricPlan }),
     [semanticCityPlan, urbanFabricPlan],
+  );
+  const ambientMobilityRoutes = useMemo(
+    () => resolveAmbientMobilityRoutes(urbanFabricPlan, visualCityPlan),
+    [urbanFabricPlan, visualCityPlan],
   );
   const cityCapabilities = useMemo(() => {
     return {
@@ -853,6 +979,106 @@ export function RepoCityApp() {
     effectiveSelectedEntityId,
     entities,
   );
+  const modeProfile = useMemo(() => resolveModeVisualProfile(mode), [mode]);
+  const ambientPresentation = useMemo(
+    () =>
+      resolveAmbientPresentation(modeProfile, {
+        traffic: showTraffic,
+        pedestrians: showPedestrians,
+        waterTraffic: showWaterTraffic,
+      }),
+    [modeProfile, showPedestrians, showTraffic, showWaterTraffic],
+  );
+  const selectedAddress = useMemo(
+    () =>
+      effectiveSelectedEntityId
+        ? resolveSemanticAddress(
+            effectiveSelectedEntityId,
+            entities,
+            districts,
+            semanticCityPlan,
+            urbanFabricPlan,
+          )
+        : null,
+    [districts, effectiveSelectedEntityId, entities, semanticCityPlan, urbanFabricPlan],
+  );
+  const selectedComponentId =
+    semanticLens.selection.kind === "component"
+      ? semanticLens.selection.componentId
+      : selectedAddress?.componentId;
+  const selectedComponent = useMemo(
+    () =>
+      selectedComponentId
+        ? resolveComponentSelection(
+            selectedComponentId,
+            semanticCityPlan,
+            urbanFabricPlan,
+          )
+        : null,
+    [selectedComponentId, semanticCityPlan, urbanFabricPlan],
+  );
+  const placementExplanation = useMemo(
+    () =>
+      effectiveSelectedEntityId
+        ? resolvePlacementExplanation(
+            effectiveSelectedEntityId,
+            entities,
+            districts,
+            semanticCityPlan,
+            urbanFabricPlan,
+          )
+        : null,
+    [districts, effectiveSelectedEntityId, entities, semanticCityPlan, urbanFabricPlan],
+  );
+  const semanticBreadcrumb = useMemo(
+    () =>
+      resolveSemanticBreadcrumb({
+        repositoryName: manifest.repo.name,
+        selectedComponentId:
+          semanticLens.selection.kind === "component"
+            ? semanticLens.selection.componentId
+            : null,
+        selectedEntityId:
+          semanticLens.selection.kind === "component"
+            ? null
+            : effectiveSelectedEntityId,
+        selectedSymbol,
+        entities,
+        districts,
+        semanticPlan: semanticCityPlan,
+        urbanFabric: urbanFabricPlan,
+      }),
+    [districts, effectiveSelectedEntityId, entities, manifest.repo.name, selectedSymbol, semanticCityPlan, semanticLens.selection, urbanFabricPlan],
+  );
+  const semanticLabels = useMemo(
+    () =>
+      resolveVisibleSemanticLabels({
+        mode,
+        selectedComponentId,
+        selectedEntityId: effectiveSelectedEntityId,
+        flowDestinationEntityId:
+          mode === "journey"
+            ? flowJourneyView?.steps[journeyStepIndex]?.entityId
+            : null,
+        entities,
+        districts,
+        semanticPlan: semanticCityPlan,
+        urbanFabric: urbanFabricPlan,
+      }),
+    [districts, effectiveSelectedEntityId, entities, flowJourneyView, journeyStepIndex, mode, selectedComponentId, semanticCityPlan, urbanFabricPlan],
+  );
+  const semanticRelationOverlays = useMemo(
+    () =>
+      resolveOneHopRelationshipOverlays({
+        entityId: effectiveSelectedEntityId,
+        direction: semanticLens.relationDirection,
+        entities,
+        relations,
+        urbanFabric: urbanFabricPlan,
+        visibleRelationIds: replayFrame.activeRelationIds,
+      }),
+    [effectiveSelectedEntityId, entities, relations, replayFrame.activeRelationIds, semanticLens.relationDirection, urbanFabricPlan],
+  );
   const activateProject = useCallback(
     (nextProject: ViewerProject, projectKey?: string | null) => {
       // Validate cross-file replay invariants before committing the project to
@@ -861,6 +1087,16 @@ export function RepoCityApp() {
       setProject(nextProject);
       const firstEntity = findInitialEntity(nextProject.entities);
       setSelectedEntityId(firstEntity?.id ?? "");
+      setSemanticLens({
+        mode: "journey",
+        selection: firstEntity
+          ? { kind: "entity", entityId: firstEntity.id }
+          : { kind: "none" },
+        relationDirection: "off",
+        labelLevel: "auto",
+      });
+      setSelectedSymbol(undefined);
+      setSelectedRelationId(undefined);
       setCommitIndex(Math.max(0, nextProject.commits.length - 1));
       setMode("journey");
       setIsPlaying(false);
@@ -937,29 +1173,15 @@ export function RepoCityApp() {
   }, [activateProject]);
 
   const searchResults = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return [];
-    return entities
-      .filter((entity) => visibleEntityIds.has(entity.id))
-      .map((entity) => {
-        const name = entity.name.toLowerCase();
-        const path = entity.path.toLowerCase();
-        const symbols = entity.exportNames.join(" ").toLowerCase();
-        const score = name.startsWith(query)
-          ? 0
-          : name.includes(query)
-            ? 1
-            : path.includes(query)
-              ? 2
-              : symbols.includes(query)
-                ? 3
-                : 9;
-        return { entity, score };
-      })
-      .filter((item) => item.score < 9)
-      .sort((a, b) => a.score - b.score || a.entity.path.localeCompare(b.entity.path))
-      .slice(0, 7);
-  }, [entities, searchQuery, visibleEntityIds]);
+    return resolveSemanticSearchResults({
+      query: searchQuery,
+      entities,
+      visibleEntityIds,
+      districts,
+      semanticPlan: semanticCityPlan,
+      urbanFabric: urbanFabricPlan,
+    });
+  }, [districts, entities, searchQuery, semanticCityPlan, urbanFabricPlan, visibleEntityIds]);
 
   useEffect(() => {
     if (mode !== "journey" || flowSimulation.journeys.length > 0) return;
@@ -1029,6 +1251,12 @@ export function RepoCityApp() {
     if (!step) return;
     const frame = window.requestAnimationFrame(() => {
       setSelectedEntityId(step.entityId);
+      setSemanticLens((current) => ({
+        ...current,
+        selection: { kind: "entity", entityId: step.entityId },
+      }));
+      setSelectedSymbol(undefined);
+      setSelectedRelationId(undefined);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [flowJourneyView, journeyStepIndex, mode]);
@@ -1094,6 +1322,12 @@ export function RepoCityApp() {
 
   function selectEntity(entityId: string) {
     setSelectedEntityId(entityId);
+    setSemanticLens((current) => ({
+      ...current,
+      selection: { kind: "entity", entityId },
+    }));
+    setSelectedSymbol(undefined);
+    setSelectedRelationId(undefined);
     setInspectorTab("overview");
   }
 
@@ -1103,13 +1337,15 @@ export function RepoCityApp() {
     window.requestAnimationFrame(() => setFocusEntityId(entityId));
   }
 
-  function chooseSearchResult(entityId: string) {
+  function chooseSearchResult(entityId: string, symbolName?: string) {
+    setMode("map");
     focusEntity(entityId);
+    setSelectedSymbol(symbolName);
     setSearchQuery("");
     setSearchOpen(false);
   }
 
-  function switchMode(nextMode: Mode) {
+  function switchMode(nextMode: CityMode) {
     if (
       nextMode === "journey" &&
       flowSimulation.journeys.length === 0
@@ -1121,10 +1357,47 @@ export function RepoCityApp() {
     if (nextMode === "journey") {
       setCommitIndex(commits.length - 1);
       setJourneyPlaying(!prefersReducedMotion);
-    } else if (nextMode === "explore") {
+    } else if (nextMode === "explore" || nextMode === "map") {
       setCommitIndex(commits.length - 1);
     } else if (mode !== "replay") {
       setCommitIndex(0);
+    }
+  }
+
+  function selectComponent(componentId: string) {
+    setMode("map");
+    setSemanticLens((current) => ({
+      ...current,
+      selection: { kind: "component", componentId },
+    }));
+    setSelectedRelationId(undefined);
+  }
+
+  function selectSemanticRelation(relationId: string) {
+    setSelectedRelationId(relationId);
+    setSemanticLens((current) => ({
+      ...current,
+      relationDirection:
+        current.relationDirection === "off" ? "both" : current.relationDirection,
+      selection: { kind: "relation", relationId },
+    }));
+    setInspectorTab("relations");
+  }
+
+  function navigateBreadcrumb(kind: string, entityId?: string, componentId?: string) {
+    if (kind === "repository") {
+      setSemanticLens((current) => ({ ...current, selection: { kind: "none" } }));
+      setSelectedEntityId("");
+      setSelectedSymbol(undefined);
+      return;
+    }
+    if (kind === "component" && componentId) {
+      selectComponent(componentId);
+      return;
+    }
+    if (entityId) {
+      setMode("map");
+      focusEntity(entityId);
     }
   }
 
@@ -1172,7 +1445,15 @@ export function RepoCityApp() {
   }
 
   return (
-    <main className={`repo-app ${hudVisible ? "" : "hud-hidden"}`}>
+    <main
+      className={`repo-app mode-${mode} ${hudVisible ? "" : "hud-hidden"}`}
+      style={
+        {
+          "--city-context-saturation": modeProfile.cityContextSaturation,
+          "--city-context-opacity": modeProfile.cityContextOpacity,
+        } as CSSProperties
+      }
+    >
       <header className="topbar">
         <button
           type="button"
@@ -1222,7 +1503,10 @@ export function RepoCityApp() {
             onFocus={() => setSearchOpen(true)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && searchResults[0]) {
-                chooseSearchResult(searchResults[0].entity.id);
+                chooseSearchResult(
+                  searchResults[0].entity.id,
+                  searchResults[0].matchedSymbol,
+                );
               }
             }}
             placeholder="搜索文件、模块或导出符号…"
@@ -1238,15 +1522,15 @@ export function RepoCityApp() {
                 <small>ENTER 直达</small>
               </div>
               {searchResults.length ? (
-                searchResults.map(({ entity }) => {
-                  const district = districts.find(
-                    (item) => item.id === entity.districtId,
-                  );
+                searchResults.map((result) => {
+                  const { entity } = result;
                   return (
                     <button
                       type="button"
                       key={entity.id}
-                      onClick={() => chooseSearchResult(entity.id)}
+                      onClick={() =>
+                        chooseSearchResult(entity.id, result.matchedSymbol)
+                      }
                     >
                       <span
                         className="search-file-icon"
@@ -1259,9 +1543,16 @@ export function RepoCityApp() {
                       </span>
                       <span>
                         <strong>{entity.name}</strong>
-                        <small>{entity.path}</small>
+                        <small>
+                          {result.entityType === "export"
+                            ? `symbol: ${result.matchedSymbol}`
+                            : entity.path}
+                        </small>
+                        <small className="search-semantic-address">
+                          {result.componentLabel} · {result.moduleLabel} · {result.addressLabel}
+                        </small>
                       </span>
-                      <em>{district?.name}</em>
+                      <em>{result.entityType === "export" ? "EXPORT" : "FILE"}</em>
                     </button>
                   );
                 })
@@ -1283,6 +1574,15 @@ export function RepoCityApp() {
           >
             <MapIcon size={14} />
             探索
+          </button>
+          <button
+            type="button"
+            className={mode === "map" ? "active" : ""}
+            aria-pressed={mode === "map"}
+            onClick={() => switchMode("map")}
+          >
+            <Building2 size={14} />
+            地图
           </button>
           <button
             type="button"
@@ -1353,7 +1653,7 @@ export function RepoCityApp() {
                   AMBIENT / 环境活动
                 </div>
                 <p className="ambient-layer-note">
-                  仅营造城市尺度，不代表代码事实；流动模式会自动隐藏。
+                  确定性城市语境，不代表运行遥测；地图、流动与回放模式会降低强调度。
                 </p>
                 <label>
                   <input
@@ -1430,7 +1730,42 @@ export function RepoCityApp() {
             </button>
           </div>
           <div className="district-list">
-            {visibleDistricts.map((district) => {
+            {mode === "map"
+              ? semanticCityPlan.components.map((component) => {
+                  const selection = resolveComponentSelection(
+                    component.id,
+                    semanticCityPlan,
+                    urbanFabricPlan,
+                  );
+                  const accent = urbanFabricPlan.componentAssignments.find(
+                    (assignment) => assignment.componentId === component.id,
+                  )?.accentColor ?? "#72e0c1";
+                  const active = selectedComponentId === component.id;
+                  return (
+                    <button
+                      type="button"
+                      key={component.id}
+                      className={active ? "is-selected" : ""}
+                      onClick={() => selectComponent(component.id)}
+                    >
+                      <span
+                        className="district-beacon"
+                        style={{
+                          color: accent,
+                          background: `${accent}18`,
+                        }}
+                      >
+                        <span style={{ background: accent }} />
+                      </span>
+                      <span>
+                        <strong>{component.label}</strong>
+                        <small>{selection?.blockIds.length ?? 0} BLOCKS · {component.cluster.strategy}</small>
+                      </span>
+                      <em>{component.metrics.files}</em>
+                    </button>
+                  );
+                })
+              : visibleDistricts.map((district) => {
               const count = visibleEntities.filter(
                 (entity) => entity.districtId === district.id,
               ).length;
@@ -1461,6 +1796,13 @@ export function RepoCityApp() {
             })}
           </div>
           <div className="legend">
+            <div className="semantic-layer-legend" aria-label="语义图层与来源">
+              <span><i className="context" />城市语境<small>确定性模拟</small></span>
+              <span><i className="ownership" />语义归属<small>仓库事实 + 空间投影</small></span>
+              <span><i className="relation" />静态关系<small>仓库事实</small></span>
+              <span><i className="evidence" />证据旅程<small>静态推导 / 模拟</small></span>
+              <span><i className="replay" />回放事件<small>Git 历史事实</small></span>
+            </div>
             {mode === "journey" ? (
               <>
                 <div className="section-label">
@@ -1493,6 +1835,10 @@ export function RepoCityApp() {
                   道路来自静态依赖；流动车辆只来自当前确定性场景，
                   模拟密度不是生产流量。
                 </p>
+                <div className="ambient-evidence-key">
+                  <span>○ 环境模拟 / Ambient context</span>
+                  <span>◆ 数据旅程 / Evidence journey</span>
+                </div>
               </>
             ) : (
               <>
@@ -1537,6 +1883,7 @@ export function RepoCityApp() {
             urbanFabricPlan={urbanFabricPlan}
             visualCityPlan={visualCityPlan}
             semanticFlowProjection={semanticFlowProjection}
+            ambientMobilityRoutes={ambientMobilityRoutes}
             entities={entities}
             relations={relations}
             districts={districts}
@@ -1547,17 +1894,54 @@ export function RepoCityApp() {
             changedEntityIds={replayFrame.changedEntityIds}
             selectedEntityId={effectiveSelectedEntityId}
             onSelectEntity={selectEntity}
+            selectedComponentId={selectedComponentId}
+            onSelectComponent={selectComponent}
+            onSelectSemanticRelation={selectSemanticRelation}
+            semanticLabels={semanticLabels}
+            semanticMode={mode}
+            semanticProfile={modeProfile}
+            semanticRelations={semanticRelationOverlays}
             focusEntityId={focusEntityId}
             followConstruction={mode === "replay" && followConstruction}
             timeOfDay={activeTimePreset.hour}
-            showTraffic={mode !== "journey" && showTraffic}
-            showPedestrians={mode !== "journey" && showPedestrians}
-            showWaterTraffic={mode !== "journey" && showWaterTraffic}
+            showTraffic={ambientPresentation.traffic}
+            showPedestrians={ambientPresentation.pedestrians}
+            showWaterTraffic={ambientPresentation.waterTraffic}
             flowJourney={mode === "journey" ? flowJourneyView : null}
             flowFollow={mode === "journey" && followJourney}
             flowStepIndex={journeyStepIndex}
             flowPlaying={mode === "journey" && journeyPlaying}
           />
+          <nav
+            className="semantic-breadcrumb"
+            aria-label="语义位置"
+            data-semantic-label-count={semanticLabels.length}
+          >
+            {semanticBreadcrumb.map((item, index) => (
+              <span key={item.id}>
+                {index > 0 ? <CornerDownRight size={11} /> : null}
+                <button
+                  type="button"
+                  data-kind={item.kind}
+                  title={`${item.provenance} · ${item.label}`}
+                  onClick={() =>
+                    navigateBreadcrumb(item.kind, item.entityId, item.componentId)
+                  }
+                >
+                  {item.label}
+                </button>
+              </span>
+            ))}
+          </nav>
+          {mode === "map" && selectedComponent ? (
+            <div className="semantic-selection-summary">
+              <span>SEMANTIC OWNERSHIP</span>
+              <strong>{selectedComponent.component.label}</strong>
+              <small>
+                {selectedComponent.entityIds.length} files · {selectedComponent.blockIds.length} blocks · {selectedComponent.buildingIds.length} buildings
+              </small>
+            </div>
+          ) : null}
           <div className="stage-vignette" />
           <button
             className="hud-toggle-button"
@@ -1578,6 +1962,8 @@ export function RepoCityApp() {
                   ? "REPLAY STATE"
                   : mode === "journey"
                     ? "FLOW SIMULATION"
+                    : mode === "map"
+                      ? "SEMANTIC MAP"
                     : "HEAD SNAPSHOT"}
               </small>
               <strong>
@@ -1587,6 +1973,10 @@ export function RepoCityApp() {
                     ? flowJourneyView
                       ? `数据旅程 ${journeyStepIndex + 1}/${flowJourneyView.steps.length}`
                       : "当前 HEAD 无可生成旅程"
+                    : mode === "map"
+                      ? selectedComponent
+                        ? `${selectedComponent.component.label} · ${selectedComponent.entityIds.length} files`
+                        : "选择组件查看语义归属"
                     : "城市已同步"}
               </strong>
             </span>
@@ -1631,19 +2021,19 @@ export function RepoCityApp() {
           <div className="city-stats">
             <div>
               <strong>{visibleEntities.length}</strong>
-              <span>{mode === "journey" ? "文件事实" : "建筑"}</span>
+              <span>{mode === "journey" || mode === "map" ? "文件事实" : "建筑"}</span>
             </div>
             <div>
               <strong>
-                {mode === "journey"
+                {mode === "journey" || mode === "map"
                   ? semanticCityPlan.components.length
                   : visibleDistrictIds.size}
               </strong>
-              <span>{mode === "journey" ? "语义组件" : "城区"}</span>
+              <span>{mode === "journey" || mode === "map" ? "语义组件" : "城区"}</span>
             </div>
             <div>
               <strong>{metric(replayFrame.activeRelationIds.size)}</strong>
-              <span>{mode === "journey" ? "静态关系" : "关系"}</span>
+              <span>{mode === "journey" || mode === "map" ? "静态关系" : "关系"}</span>
             </div>
           </div>
           {mode === "replay" && (
@@ -1675,6 +2065,25 @@ export function RepoCityApp() {
               project={project}
               activeRelationIds={replayFrame.activeRelationIds}
               visibleEntityIds={visibleEntityIds}
+              placement={placementExplanation}
+              relationDirection={semanticLens.relationDirection}
+              selectedRelationId={selectedRelationId}
+              selectedSymbol={selectedSymbol}
+              onRelationDirection={(relationDirection) =>
+                setSemanticLens((current) => ({ ...current, relationDirection }))
+              }
+              onSelectRelation={selectSemanticRelation}
+              onSelectSymbol={(symbolName) => {
+                setSelectedSymbol(symbolName);
+                setSemanticLens((current) => ({
+                  ...current,
+                  selection: {
+                    kind: "entity",
+                    entityId: selectedEntity.id,
+                    symbolName,
+                  },
+                }));
+              }}
             />
           ) : (
             <EmptyInspector onOpenProject={() => setProjectOpen(true)} />
