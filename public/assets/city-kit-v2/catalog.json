@@ -1,0 +1,180 @@
+{
+  "version": "0.2",
+  "deterministic": true,
+  "license": "Apache-2.0",
+  "classification": "NON_SEMANTIC_URBAN_CONTEXT",
+  "generatedFrom": "scripts/generate-city-kit-v2.mjs",
+  "assets": [
+    {
+      "file": "chicago-school-masonry.glb",
+      "bytes": 143316,
+      "triangles": 936,
+      "sha256": "b4e92128521db89efb0332debd42522297762d11adc9368eaaf2e0c0e88e0883",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "miesian-grid.glb",
+      "bytes": 209356,
+      "triangles": 1368,
+      "sha256": "737f599a5f2a04e246bc43a4842ed0af920a3de76b365909180be1b9cffaac05",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "blue-green-curtain-wall.glb",
+      "bytes": 209416,
+      "triangles": 1368,
+      "sha256": "2ac2ee9d00c63191050c3da7ff195a7ba9058d8714632bbe2e9d1633390de0f4",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "bronze-vertical-modern.glb",
+      "bytes": 209416,
+      "triangles": 1368,
+      "sha256": "12d5118b9e1d344ec544008111c0277793dd8daa8ae4aa78809fbe5fc73a3767",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "fulton-brick-warehouse.glb",
+      "bytes": 143320,
+      "triangles": 936,
+      "sha256": "e67448208155b1f8c56824be4c0138c08b9018fabec9f2b15e4973d1e6357fcb",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "narrow-storefront-row.glb",
+      "bytes": 143304,
+      "triangles": 936,
+      "sha256": "f8845e497061a16fd910097a2bcf4869d7c7932868fb15f4d6135ff977d482ad",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "art-deco-setback.glb",
+      "bytes": 143276,
+      "triangles": 936,
+      "sha256": "f9d252153319d9f8072fe2ab05ad8e14eadb580ae4c84d507c5d72bf52078621",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "civic-institutional.glb",
+      "bytes": 143296,
+      "triangles": 936,
+      "sha256": "9200668b81979e39f0a31e0240690fd32ea42f4c6065a414a1fb9e13b7736761",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    },
+    {
+      "file": "riverfront-terrace.glb",
+      "bytes": 209388,
+      "triangles": 1368,
+      "sha256": "ad7e9d2bf5a2d0e83c4f261fe8059adf16e82278b4db73f05fd0d8c0799cd83c",
+      "roots": [
+        "base",
+        "middle-rhythm-1",
+        "middle-rhythm-2",
+        "middle-rhythm-3",
+        "corner-1",
+        "corner-2",
+        "end-wall",
+        "setback-shoulder",
+        "roof-1",
+        "roof-2",
+        "roof-3"
+      ]
+    }
+  ]
+}
