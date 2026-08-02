@@ -46,67 +46,135 @@ export function transitionSemanticLensMode(
   return { ...state, mode };
 }
 
+export interface SemanticSelectionTransition {
+  state: SemanticLensState;
+  selectedEntityId: string | null;
+  selectedSymbol: string | null;
+}
+
+/**
+ * Keeps the semantic selection and the legacy file-inspector state coherent.
+ * A component click is a scope selection, so it deliberately clears any file
+ * child instead of inventing a representative file for that component.
+ */
+export function transitionSemanticSelection(
+  state: SemanticLensState,
+  selection: SemanticSelection,
+  currentSelectedEntityId?: string | null,
+): SemanticSelectionTransition {
+  return {
+    state: { ...state, selection },
+    selectedEntityId:
+      selection.kind === "entity"
+        ? selection.entityId
+        : selection.kind === "relation"
+          ? currentSelectedEntityId ?? null
+          : null,
+    selectedSymbol:
+      selection.kind === "entity" ? selection.symbolName ?? null : null,
+  };
+}
+
+export interface SemanticSelectionPresentation {
+  componentId: string | null;
+  entityId: string | null;
+  inspectorScope: "empty" | "component" | "building" | "file" | "relation";
+}
+
+/**
+ * Resolves the only component/file pairing that may be presented by the UI.
+ * Component and building scopes never leak a stale file inspector.
+ */
+export function resolveSemanticSelectionPresentation({
+  selection,
+  presentedEntityId,
+  urbanFabric,
+}: {
+  selection: SemanticSelection;
+  presentedEntityId?: string | null;
+  urbanFabric: UrbanFabricPlan;
+}): SemanticSelectionPresentation {
+  if (selection.kind === "component") {
+    return {
+      componentId: selection.componentId,
+      entityId: null,
+      inspectorScope: "component",
+    };
+  }
+  if (selection.kind === "building") {
+    const building = urbanFabric.buildings.find(
+      (candidate) => candidate.id === selection.buildingId,
+    );
+    return {
+      componentId: building?.componentId ?? null,
+      entityId: null,
+      inspectorScope: "building",
+    };
+  }
+  if (selection.kind === "none") {
+    return { componentId: null, entityId: null, inspectorScope: "empty" };
+  }
+  const entityId =
+    selection.kind === "entity"
+      ? presentedEntityId ?? selection.entityId
+      : presentedEntityId ?? null;
+  return {
+    componentId: entityId
+      ? urbanFabric.entityAddresses[entityId]?.componentId ?? null
+      : null,
+    entityId,
+    inspectorScope: selection.kind === "relation" ? "relation" : "file",
+  };
+}
+
 export interface CityVisualProfile {
   mode: CityMode;
-  cityContextOpacity: number;
-  cityContextSaturation: number;
+  /** CSS filter over the complete WebGL canvas, not only city geometry. */
+  canvasBrightness: number;
+  /** CSS filter over the complete WebGL canvas, not only city geometry. */
+  canvasSaturation: number;
   ambientOpacity: number;
   ambientSpeedScale: number;
   semanticOverlayOpacity: number;
-  semanticLabelDensity: "minimal" | "district" | "building";
   relationOpacity: number;
-  journeyOpacity: number;
-  replayOpacity: number;
 }
 
 const MODE_PROFILES: Readonly<Record<CityMode, CityVisualProfile>> = {
   explore: {
     mode: "explore",
-    cityContextOpacity: 1,
-    cityContextSaturation: 1,
+    canvasBrightness: 1,
+    canvasSaturation: 1,
     ambientOpacity: 1,
     ambientSpeedScale: 1,
     semanticOverlayOpacity: 0.25,
-    semanticLabelDensity: "minimal",
     relationOpacity: 0,
-    journeyOpacity: 0,
-    replayOpacity: 0,
   },
   map: {
     mode: "map",
-    cityContextOpacity: 0.58,
-    cityContextSaturation: 0.38,
+    canvasBrightness: 0.924,
+    canvasSaturation: 0.38,
     ambientOpacity: 0.25,
     ambientSpeedScale: 0.72,
     semanticOverlayOpacity: 1,
-    semanticLabelDensity: "district",
     relationOpacity: 0.8,
-    journeyOpacity: 0,
-    replayOpacity: 0,
   },
   journey: {
     mode: "journey",
-    cityContextOpacity: 0.72,
-    cityContextSaturation: 0.62,
+    canvasBrightness: 0.95,
+    canvasSaturation: 0.62,
     ambientOpacity: 0.25,
     ambientSpeedScale: 0.78,
     semanticOverlayOpacity: 0.65,
-    semanticLabelDensity: "building",
     relationOpacity: 0.2,
-    journeyOpacity: 1,
-    replayOpacity: 0,
   },
   replay: {
     mode: "replay",
-    cityContextOpacity: 0.68,
-    cityContextSaturation: 0.5,
+    canvasBrightness: 0.942,
+    canvasSaturation: 0.5,
     ambientOpacity: 0.2,
     ambientSpeedScale: 0.58,
     semanticOverlayOpacity: 0.6,
-    semanticLabelDensity: "minimal",
     relationOpacity: 0.15,
-    journeyOpacity: 0,
-    replayOpacity: 1,
   },
 };
 
@@ -133,6 +201,22 @@ export function resolveAmbientPresentation(
     ...toggles,
     emphasis: profile.ambientOpacity,
     speedScale: profile.ambientSpeedScale,
+  };
+}
+
+export function resolveLayerPlayback({
+  journeyPlaying,
+  reducedMotion,
+}: {
+  journeyPlaying: boolean;
+  reducedMotion: boolean;
+}): { ambientPlaying: boolean; evidenceJourneyPlaying: boolean } {
+  if (reducedMotion) {
+    return { ambientPlaying: false, evidenceJourneyPlaying: false };
+  }
+  return {
+    ambientPlaying: true,
+    evidenceJourneyPlaying: journeyPlaying,
   };
 }
 

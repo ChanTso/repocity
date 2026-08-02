@@ -151,8 +151,8 @@ input:focus-visible {
 .repo-app.mode-map .city-stage canvas,
 .repo-app.mode-journey .city-stage canvas,
 .repo-app.mode-replay .city-stage canvas {
-  filter: saturate(var(--city-context-saturation, 1))
-    brightness(calc(0.82 + var(--city-context-opacity, 1) * 0.18));
+  filter: saturate(var(--canvas-saturation, 1))
+    brightness(var(--canvas-brightness, 1));
   transition: filter 260ms ease;
 }
 
@@ -1193,6 +1193,36 @@ kbd {
   font-size: 7px;
 }
 
+.map-overview-button {
+  position: absolute;
+  z-index: 5;
+  top: 54px;
+  right: 350px;
+  display: flex;
+  height: 28px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid rgba(139, 207, 189, 0.18);
+  border-radius: 7px;
+  color: #8fa9a2;
+  background: rgba(5, 18, 20, 0.74);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 7px;
+  backdrop-filter: blur(12px);
+  gap: 5px;
+}
+
+.map-overview-button:hover {
+  border-color: rgba(114, 224, 193, 0.45);
+  color: var(--mint);
+}
+
+.map-overview-button kbd {
+  color: #557069;
+  font-size: 6px;
+}
+
 .stage-vignette {
   position: absolute;
   z-index: 2;
@@ -1459,6 +1489,7 @@ kbd {
 .repo-app.hud-hidden .journey-selector,
 .repo-app.hud-hidden .semantic-breadcrumb,
 .repo-app.hud-hidden .semantic-selection-summary,
+.repo-app.hud-hidden .map-overview-button,
 .repo-app.hud-hidden .semantic-map-label {
   opacity: 0;
   visibility: hidden;
@@ -1529,6 +1560,16 @@ kbd {
   font-size: 8px;
   font-weight: 700;
   gap: 4px;
+}
+
+.component-role-badge {
+  border-color: rgba(114, 224, 193, 0.32);
+  color: var(--mint);
+  background: rgba(71, 161, 138, 0.09);
+}
+
+.component-inspector .inspector-section-stack {
+  overflow-y: auto;
 }
 
 .inspector-actions {

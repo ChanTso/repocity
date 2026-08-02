@@ -8,13 +8,16 @@ import {
   resolveAmbientMobilityRoutes,
   resolveBuildingSelection,
   resolveComponentSelection,
+  resolveLayerPlayback,
   resolveModeVisualProfile,
   resolveOneHopRelationshipOverlays,
   resolvePlacementExplanation,
   resolveSemanticBreadcrumb,
+  resolveSemanticSelectionPresentation,
   resolveSemanticSearchResults,
   resolveVisibleSemanticLabels,
   transitionSemanticLensMode,
+  transitionSemanticSelection,
   type CityMode,
 } from "./semantic-lens";
 import { planUrbanFabric } from "./urban-fabric";
@@ -63,9 +66,17 @@ describe("semantic lens", () => {
       expect(presentation.waterTraffic).toBe(true);
       expect(presentation.emphasis).toBeLessThan(explore.emphasis);
     }
-    expect(resolveModeVisualProfile("journey").journeyOpacity).toBeGreaterThan(
-      resolveModeVisualProfile("journey").ambientOpacity,
-    );
+    expect(resolveModeVisualProfile("journey").ambientSpeedScale).toBe(0.78);
+  });
+
+  it("keeps ambient playback independent from evidence playback", () => {
+    expect(
+      resolveLayerPlayback({ journeyPlaying: false, reducedMotion: false }),
+    ).toEqual({ ambientPlaying: true, evidenceJourneyPlaying: false });
+    expect(
+      resolveLayerPlayback({ journeyPlaying: true, reducedMotion: true }),
+    ).toEqual({ ambientPlaying: false, evidenceJourneyPlaying: false });
+    expect(resolveModeVisualProfile("journey").ambientSpeedScale).toBe(0.78);
   });
 
   it("still respects disabled ambient toggles in every mode", () => {
@@ -153,6 +164,54 @@ describe("semantic lens", () => {
     ).toEqual(["repository", "component"]);
   });
 
+  it("clears file A and returns one coherent component-B presentation", () => {
+    const fileA = demoProject.entities.find(
+      (candidate) => fabric.entityAddresses[candidate.id],
+    )!;
+    const componentA = fabric.entityAddresses[fileA.id]!.componentId;
+    const componentB = semantic.components.find(
+      (candidate) => candidate.id !== componentA,
+    )!;
+    const current = {
+      mode: "map" as const,
+      selection: { kind: "entity" as const, entityId: fileA.id },
+      relationDirection: "off" as const,
+      labelLevel: "auto" as const,
+    };
+    const transition = transitionSemanticSelection(
+      current,
+      { kind: "component", componentId: componentB.id },
+      fileA.id,
+    );
+    const presentation = resolveSemanticSelectionPresentation({
+      selection: transition.state.selection,
+      presentedEntityId: fileA.id,
+      urbanFabric: fabric,
+    });
+    const breadcrumb = resolveSemanticBreadcrumb({
+      repositoryName: demoProject.manifest.repo.name,
+      selectedComponentId: presentation.componentId,
+      selectedEntityId: presentation.entityId,
+      entities: demoProject.entities,
+      districts: demoProject.districts,
+      semanticPlan: semantic,
+      urbanFabric: fabric,
+    });
+
+    expect(transition.selectedEntityId).toBeNull();
+    expect(transition.selectedSymbol).toBeNull();
+    expect(presentation).toEqual({
+      componentId: componentB.id,
+      entityId: null,
+      inspectorScope: "component",
+    });
+    expect(breadcrumb.map((item) => item.kind)).toEqual([
+      "repository",
+      "component",
+    ]);
+    expect(breadcrumb.at(-1)?.componentId).toBe(componentB.id);
+  });
+
   it("explains placement with supported facts and deterministic projection rules", () => {
     const explanation = resolvePlacementExplanation(
       entity.id,
@@ -184,6 +243,20 @@ describe("semantic lens", () => {
     expect(first).toHaveLength(4);
     expect(first[0]!.kind).toBe("file");
     expect(first.every((label) => !label.label.toLowerCase().includes("cafe"))).toBe(true);
+  });
+
+  it("never suppresses the selected file label behind a component label", () => {
+    const labels = resolveVisibleSemanticLabels({
+      mode: "map",
+      selectedEntityId: entity.id,
+      entities: demoProject.entities,
+      districts: demoProject.districts,
+      semanticPlan: semantic,
+      urbanFabric: fabric,
+      cap: 1,
+    });
+    expect(labels).toHaveLength(1);
+    expect(labels[0]).toMatchObject({ kind: "file", entityId: entity.id, selected: true });
   });
 
   it("returns only supported one-hop relationship endpoints with a distinct visual kind", () => {

@@ -132,10 +132,16 @@ export interface CitySceneProps {
   showPedestrians?: boolean;
   showWaterTraffic?: boolean;
   semanticProfile?: CityVisualProfile;
-  semanticMode?: CityVisualProfile["mode"];
   semanticLabels?: readonly SemanticLabel[];
   semanticRelations?: readonly SemanticRelationOverlay[];
   ambientMobilityRoutes?: readonly SemanticMobilityRoute[];
+  /** Independent ambient-city playback; evidence playback is flowPlaying. */
+  ambientPlaying?: boolean;
+  /** Explicit camera action. Mode switches themselves preserve camera state. */
+  cameraPresetRequest?: {
+    id: AssetReviewCameraId;
+    nonce: number;
+  } | null;
   selectedComponentId?: string | null;
   onSelectComponent?: (componentId: string) => void;
   onSelectSemanticRelation?: (relationId: string) => void;
@@ -190,10 +196,11 @@ export function CityScene({
   showPedestrians = true,
   showWaterTraffic = true,
   semanticProfile,
-  semanticMode,
   semanticLabels = [],
   semanticRelations = [],
   ambientMobilityRoutes = [],
+  ambientPlaying = true,
+  cameraPresetRequest = null,
   selectedComponentId = null,
   onSelectComponent,
   onSelectSemanticRelation,
@@ -377,6 +384,9 @@ export function CityScene({
     <div
       aria-label={ariaLabel}
       className={className}
+      data-ambient-playing={ambientPlaying ? "true" : "false"}
+      data-evidence-playing={flowPlaying ? "true" : "false"}
+      data-mode-camera-policy="preserve"
       onPointerLeave={() => hoverEntity(null)}
       role="region"
       style={{
@@ -441,10 +451,11 @@ export function CityScene({
           visualCityPlan={visualCityPlan}
           semanticFlowProjection={semanticFlowProjection}
           semanticLabels={semanticLabels}
-          semanticMode={semanticMode}
           semanticProfile={semanticProfile}
           semanticRelations={semanticRelations}
           ambientMobilityRoutes={ambientMobilityRoutes}
+          ambientPlaying={ambientPlaying}
+          cameraPresetRequest={cameraPresetRequest}
           selectedComponentId={selectedComponentId}
           onSelectComponent={onSelectComponent}
           onSelectSemanticRelation={onSelectSemanticRelation}
@@ -472,10 +483,14 @@ interface SceneContentsProps {
   visualCityPlan?: VisualCityPlan;
   semanticFlowProjection?: SemanticFlowProjection | null;
   semanticProfile?: CityVisualProfile;
-  semanticMode?: CityVisualProfile["mode"];
   semanticLabels: readonly SemanticLabel[];
   semanticRelations: readonly SemanticRelationOverlay[];
   ambientMobilityRoutes: readonly SemanticMobilityRoute[];
+  ambientPlaying: boolean;
+  cameraPresetRequest: {
+    id: AssetReviewCameraId;
+    nonce: number;
+  } | null;
   selectedComponentId?: string | null;
   bounds: LivingCityRenderBounds;
   entities: readonly CitySceneEntity[];
@@ -608,10 +623,11 @@ function SceneContents({
   visualCityPlan,
   semanticFlowProjection,
   semanticProfile,
-  semanticMode,
   semanticLabels,
   semanticRelations,
   ambientMobilityRoutes,
+  ambientPlaying,
+  cameraPresetRequest,
   selectedComponentId,
   bounds,
   entities,
@@ -1008,7 +1024,7 @@ function SceneContents({
           visualCity={visualCityPlan}
           onHoverEntity={onHoverEntity}
           onSelectEntity={onSelectEntity}
-          playing={flowJourney ? flowPlaying : true}
+          playing={ambientPlaying}
           // Only the currently inspected cutaway owns physical space. Other
           // journey stops remain lightweight semantic beacons, so a ten-step
           // tour cannot hollow ten unrelated holes out of the metropolis.
@@ -1136,7 +1152,7 @@ function SceneContents({
         targetHeight={targetHeight}
         urbanFabric={urbanFabricPlan}
         visualCity={visualCityPlan}
-        semanticMode={semanticMode}
+        cameraPresetRequest={cameraPresetRequest}
       />
     </>
   );
@@ -1490,7 +1506,7 @@ function CameraRig({
   targetHeight,
   urbanFabric,
   visualCity,
-  semanticMode,
+  cameraPresetRequest,
 }: {
   bounds: LivingCityRenderBounds;
   cityKey: string;
@@ -1504,7 +1520,10 @@ function CameraRig({
   targetHeight: (entityId: string) => number;
   urbanFabric?: UrbanFabricPlan;
   visualCity?: VisualCityPlan;
-  semanticMode?: CityVisualProfile["mode"];
+  cameraPresetRequest: {
+    id: AssetReviewCameraId;
+    nonce: number;
+  } | null;
 }) {
   const { camera } = useThree();
   const cameraAspect =
@@ -1514,6 +1533,7 @@ function CameraRig({
   const desiredPosition = useRef(new THREE.Vector3());
   const desiredTarget = useRef(new THREE.Vector3());
   const lastCityKey = useRef<string | null>(null);
+  const lastCameraPresetNonce = useRef<number | null>(null);
   const assetHero = useMemo(
     () => urbanFabric && visualCity ? planAssetBackedHero(urbanFabric, visualCity) : null,
     [urbanFabric, visualCity],
@@ -1565,8 +1585,15 @@ function CameraRig({
   }, [bounds, camera, cityKey, reviewPresets, visualCity]);
 
   useEffect(() => {
-    if (semanticMode === "map") applyVisualBookmark("public-alpha-hero");
-  }, [applyVisualBookmark, semanticMode]);
+    if (
+      !cameraPresetRequest ||
+      lastCameraPresetNonce.current === cameraPresetRequest.nonce
+    ) {
+      return;
+    }
+    lastCameraPresetNonce.current = cameraPresetRequest.nonce;
+    applyVisualBookmark(cameraPresetRequest.id);
+  }, [applyVisualBookmark, cameraPresetRequest]);
 
   const beginFocus = useCallback(
     (

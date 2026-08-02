@@ -77,14 +77,17 @@ import {
   resolveAmbientPresentation,
   resolveAmbientMobilityRoutes,
   resolveComponentSelection,
+  resolveLayerPlayback,
   resolveModeVisualProfile,
   resolveOneHopRelationshipOverlays,
   resolvePlacementExplanation,
   resolveSemanticAddress,
   resolveSemanticBreadcrumb,
+  resolveSemanticSelectionPresentation,
   resolveSemanticSearchResults,
   resolveVisibleSemanticLabels,
   transitionSemanticLensMode,
+  transitionSemanticSelection,
   type CityMode,
   type RelationDirection,
   type SemanticLensState,
@@ -282,7 +285,7 @@ function EmptyInspector({
   onOpenProject: () => void;
 }) {
   return (
-    <div className="empty-inspector">
+    <div className="empty-inspector" data-inspector-scope="empty">
       <div className="empty-building" aria-hidden="true">
         <span />
         <span />
@@ -295,6 +298,62 @@ function EmptyInspector({
         <Plus size={15} />
         导入其他仓库
       </button>
+    </div>
+  );
+}
+
+function ComponentInspector({
+  selection,
+  onClose,
+}: {
+  selection: NonNullable<ReturnType<typeof resolveComponentSelection>>;
+  onClose: () => void;
+}) {
+  const { component } = selection;
+  return (
+    <div className="inspector-content component-inspector" data-inspector-scope="component">
+      <div className="inspector-topline">
+        <span className="role-badge component-role-badge">
+          <Building2 size={12} />
+          COMPONENT SCOPE
+        </span>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={onClose}
+          aria-label="关闭组件检查器"
+        >
+          <X size={16} />
+        </button>
+      </div>
+      <div className="file-heading">
+        <div className="file-icon"><Box size={21} /></div>
+        <div>
+          <h2>{component.label}</h2>
+          <p>{component.cluster.key}</p>
+        </div>
+      </div>
+      <div className="inspector-section-stack">
+        <section className="metric-grid" aria-label="组件指标">
+          <div><span>FILES</span><strong>{component.metrics.files}</strong><small>仓库事实</small></div>
+          <div><span>LOC</span><strong>{metric(component.metrics.loc)}</strong><small>聚合值</small></div>
+          <div><span>BLOCKS</span><strong>{selection.blockIds.length}</strong><small>空间投影</small></div>
+          <div><span>BUILDINGS</span><strong>{selection.buildingIds.length}</strong><small>空间投影</small></div>
+        </section>
+        <section className="inspector-section placement-explanation">
+          <div className="section-label">
+            <MapIcon size={13} />
+            当前选择范围
+          </div>
+          <p>这是组件级选择。尚未选择任何文件，也不会自动指定“代表文件”。</p>
+          <dl>
+            <div><dt>分组策略</dt><dd>{component.cluster.strategy}</dd></div>
+            <div><dt>文件范围</dt><dd>{selection.entityIds.length} repository files</dd></div>
+            <div><dt>空间范围</dt><dd>{selection.blockIds.length} blocks · {selection.buildingIds.length} buildings</dd></div>
+            <div><dt>来源</dt><dd>repository fact + deterministic spatial projection</dd></div>
+          </dl>
+        </section>
+      </div>
     </div>
   );
 }
@@ -406,7 +465,7 @@ function Inspector({
     : undefined;
 
   return (
-    <div className="inspector-content">
+    <div className="inspector-content" data-inspector-scope="file">
       <div className="inspector-topline">
         <span
           className="role-badge"
@@ -747,6 +806,10 @@ export function RepoCityApp() {
   const [activeJourneyId, setActiveJourneyId] = useState<string>();
   const [prefersReducedMotion, setPrefersReducedMotion] =
     useState(false);
+  const [cameraPresetRequest, setCameraPresetRequest] = useState<{
+    id: "public-alpha-hero";
+    nonce: number;
+  } | null>(null);
   const [hiddenDistricts, setHiddenDistricts] = useState<Set<string>>(
     new Set(),
   );
@@ -965,7 +1028,7 @@ export function RepoCityApp() {
     () => districts.filter((district) => visibleDistrictIds.has(district.id)),
     [districts, visibleDistrictIds],
   );
-  const effectiveSelectedEntityId =
+  const replaySelectedEntityId =
     selectedEntityId === ""
       ? ""
       : visibleEntityIds.has(selectedEntityId)
@@ -975,6 +1038,16 @@ export function RepoCityApp() {
         ) ??
         visibleEntities[0]?.id ??
         "");
+  const selectionPresentation = useMemo(
+    () =>
+      resolveSemanticSelectionPresentation({
+        selection: semanticLens.selection,
+        presentedEntityId: replaySelectedEntityId || null,
+        urbanFabric: urbanFabricPlan,
+      }),
+    [replaySelectedEntityId, semanticLens.selection, urbanFabricPlan],
+  );
+  const effectiveSelectedEntityId = selectionPresentation.entityId ?? "";
   const selectedEntity = getEntityById(
     effectiveSelectedEntityId,
     entities,
@@ -988,6 +1061,10 @@ export function RepoCityApp() {
         waterTraffic: showWaterTraffic,
       }),
     [modeProfile, showPedestrians, showTraffic, showWaterTraffic],
+  );
+  const layerPlayback = useMemo(
+    () => resolveLayerPlayback({ journeyPlaying, reducedMotion: prefersReducedMotion }),
+    [journeyPlaying, prefersReducedMotion],
   );
   const selectedAddress = useMemo(
     () =>
@@ -1003,9 +1080,7 @@ export function RepoCityApp() {
     [districts, effectiveSelectedEntityId, entities, semanticCityPlan, urbanFabricPlan],
   );
   const selectedComponentId =
-    semanticLens.selection.kind === "component"
-      ? semanticLens.selection.componentId
-      : selectedAddress?.componentId;
+    selectionPresentation.componentId ?? selectedAddress?.componentId;
   const selectedComponent = useMemo(
     () =>
       selectedComponentId
@@ -1322,10 +1397,13 @@ export function RepoCityApp() {
 
   function selectEntity(entityId: string) {
     setSelectedEntityId(entityId);
-    setSemanticLens((current) => ({
-      ...current,
-      selection: { kind: "entity", entityId },
-    }));
+    setSemanticLens((current) =>
+      transitionSemanticSelection(
+        current,
+        { kind: "entity", entityId },
+        selectedEntityId,
+      ).state,
+    );
     setSelectedSymbol(undefined);
     setSelectedRelationId(undefined);
     setInspectorTab("overview");
@@ -1365,11 +1443,30 @@ export function RepoCityApp() {
   }
 
   function selectComponent(componentId: string) {
-    setMode("map");
     setSemanticLens((current) => ({
-      ...current,
-      selection: { kind: "component", componentId },
+      ...transitionSemanticSelection(
+        current,
+        { kind: "component", componentId },
+        selectedEntityId,
+      ).state,
+      mode: "map",
     }));
+    setSelectedEntityId("");
+    setSelectedSymbol(undefined);
+    setSelectedRelationId(undefined);
+    setInspectorTab("overview");
+  }
+
+  function clearSemanticSelection() {
+    setSemanticLens((current) =>
+      transitionSemanticSelection(
+        current,
+        { kind: "none" },
+        selectedEntityId,
+      ).state,
+    );
+    setSelectedEntityId("");
+    setSelectedSymbol(undefined);
     setSelectedRelationId(undefined);
   }
 
@@ -1386,9 +1483,7 @@ export function RepoCityApp() {
 
   function navigateBreadcrumb(kind: string, entityId?: string, componentId?: string) {
     if (kind === "repository") {
-      setSemanticLens((current) => ({ ...current, selection: { kind: "none" } }));
-      setSelectedEntityId("");
-      setSelectedSymbol(undefined);
+      clearSemanticSelection();
       return;
     }
     if (kind === "component" && componentId) {
@@ -1449,8 +1544,8 @@ export function RepoCityApp() {
       className={`repo-app mode-${mode} ${hudVisible ? "" : "hud-hidden"}`}
       style={
         {
-          "--city-context-saturation": modeProfile.cityContextSaturation,
-          "--city-context-opacity": modeProfile.cityContextOpacity,
+          "--canvas-saturation": modeProfile.canvasSaturation,
+          "--canvas-brightness": modeProfile.canvasBrightness,
         } as CSSProperties
       }
     >
@@ -1898,7 +1993,6 @@ export function RepoCityApp() {
             onSelectComponent={selectComponent}
             onSelectSemanticRelation={selectSemanticRelation}
             semanticLabels={semanticLabels}
-            semanticMode={mode}
             semanticProfile={modeProfile}
             semanticRelations={semanticRelationOverlays}
             focusEntityId={focusEntityId}
@@ -1910,7 +2004,9 @@ export function RepoCityApp() {
             flowJourney={mode === "journey" ? flowJourneyView : null}
             flowFollow={mode === "journey" && followJourney}
             flowStepIndex={journeyStepIndex}
-            flowPlaying={mode === "journey" && journeyPlaying}
+            flowPlaying={mode === "journey" && layerPlayback.evidenceJourneyPlaying}
+            ambientPlaying={layerPlayback.ambientPlaying}
+            cameraPresetRequest={cameraPresetRequest}
           />
           <nav
             className="semantic-breadcrumb"
@@ -1941,6 +2037,23 @@ export function RepoCityApp() {
                 {selectedComponent.entityIds.length} files · {selectedComponent.blockIds.length} blocks · {selectedComponent.buildingIds.length} buildings
               </small>
             </div>
+          ) : null}
+          {mode === "map" ? (
+            <button
+              className="map-overview-button"
+              type="button"
+              onClick={() =>
+                setCameraPresetRequest((current) => ({
+                  id: "public-alpha-hero",
+                  nonce: (current?.nonce ?? 0) + 1,
+                }))
+              }
+              title="应用地图全景预设 · 6"
+            >
+              <Maximize2 size={13} />
+              地图全景
+              <kbd>6</kbd>
+            </button>
           ) : null}
           <div className="stage-vignette" />
           <button
@@ -2058,7 +2171,7 @@ export function RepoCityApp() {
               entity={selectedEntity}
               tab={inspectorTab}
               onTab={setInspectorTab}
-              onClose={() => setSelectedEntityId("")}
+              onClose={clearSemanticSelection}
               onFocus={() => focusEntity(selectedEntity.id)}
               onSelect={focusEntity}
               currentCommitIndex={commitIndex}
@@ -2084,6 +2197,11 @@ export function RepoCityApp() {
                   },
                 }));
               }}
+            />
+          ) : selectionPresentation.inspectorScope === "component" && selectedComponent ? (
+            <ComponentInspector
+              selection={selectedComponent}
+              onClose={clearSemanticSelection}
             />
           ) : (
             <EmptyInspector onOpenProject={() => setProjectOpen(true)} />
