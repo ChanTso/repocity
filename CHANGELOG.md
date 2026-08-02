@@ -9,10 +9,13 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 - Dedicated semantic Map mode with component ownership, building envelopes, stable addresses, deterministic labels, and repository-to-symbol breadcrumbs.
 - Inspector placement explanations, semantic search navigation, and focused one-hop relationship evidence.
 - Explicit City Context / Semantic Ownership / Static Relationship / Evidence Journey / Replay Event legend.
+- Deterministic Living Streets plans for connected road lanes, public-frontage pedestrians, crossings, bridge walks, riverwalks, and channel-bound boats.
+- Instance-batched ambient vehicles, shared night lights, fixed-camera review captures, motion evidence, diagnostics, and route-invariant tests.
 
 ### Changed
 
 - Flow retains a reduced deterministic ambient cohort instead of presenting an empty city; ambient traffic remains explicitly non-semantic and non-telemetric.
+- Ambient playback remains independent from Flow evidence pause; Map and Replay keep the same cohort visually subordinate.
 
 This section describes an unmerged development candidate and does not announce a v0.2 release or schedule.
 

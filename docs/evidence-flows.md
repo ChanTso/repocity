@@ -28,4 +28,6 @@ The repository-pipeline journey explains how RepoCity analyzes and compiles a re
 
 Ambient routes are derived once from compiled urban fabric and carry no evidence-relation IDs. They are city context, not a duplicate journey simulation and not observed telemetry.
 
+Living Streets expands that context with connected lane loops, public-frontage and crossing walks, bridge approaches, riverwalks, and channel-bound boats. The cohort is seeded and budgeted from city scale only. Ambient density never represents file importance, runtime load, production traffic, or journey volume. Development diagnostics report ambient playback/counts separately from evidence playback/token counts.
+
 See [V3 Flow City specification](V3_FLOW_CITY_SPEC.md) for the longer design target and current boundary.

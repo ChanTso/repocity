@@ -32,4 +32,10 @@ Selected file/building labels outrank unselected component labels, and product H
 
 Mode saturation and brightness use a CSS filter on the complete WebGL canvas. The filter therefore affects city geometry, semantic overlays, journeys, and replay geometry together; it is not an independently selective “city-only” treatment. Ambient opacity/speed and semantic/relation opacity are renderer-level layer controls. Mode switches preserve the current camera, while the Map overview button and review-camera key `6` apply the public-alpha overview explicitly.
 
+## Living Streets activity layer
+
+The ambient plan uses existing connected roads, public frontages, sidewalks, crossings, bridge walks, riverwalks, and river bounds. Vehicles are lane-offset and instance-batched; pedestrians use public surfaces and deterministic dwell points; boats follow opposing channel lanes. Day/night details use shared emissive instances rather than dynamic per-agent lights. The river/bridge review camera is slightly elevated so its existing bridge, pedestrian edge, and navigable channel can be inspected in one fixed frame.
+
+All ambient agents remain `NON_SEMANTIC_URBAN_CONTEXT`. They are unselectable, use no repository density metric, and never receive the evidence token's silhouette, route pulse, stage number, or provenance UI.
+
 See [the asset manifest](assets/city-kit-v1-manifest.md), [V4.2 asset strategy](VISUAL_CITY_V4_2.md), and [V4.3 street-reality pass](VISUAL_CITY_V4_3.md).
