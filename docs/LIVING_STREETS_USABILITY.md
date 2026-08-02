@@ -21,6 +21,8 @@ The browser review confirmed that the controls and presentation needed for the f
 7. Flow exposes route evidence and provenance;
 8. component, file, module/building, and placement-explanation Semantic Lens paths remain present.
 
+The review-fix browser probe additionally confirmed that pausing a 31-token journey leaves ambient playback active with 32 vehicles enabled. A 120-second Explore soak completed without browser errors or warnings. These remain owner-run functional observations, not participant evidence.
+
 This is a functional smoke test, not a substitute for participant evidence and not an acceptance result.
 
 ## Future participant protocol
