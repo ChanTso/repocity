@@ -65,9 +65,9 @@ Read the [Semantic model](docs/semantic-model.md).
 
 ![RepoCity street detail](docs/media/repocity-street-detail.png)
 
-The alpha concentrates its asset-backed visual fidelity in one hero slice using original brick, stone, steel, glass, storefront, street, river-edge, and bridge modules. Outer districts intentionally use simpler level-of-detail geometry.
+The current development candidate extends its original brick, stone, steel, bronze, glass, storefront, street, river-edge, and bridge language across the semantic core through deterministic modular Chicago Kit v2 signatures. Outer context still uses progressively simpler level-of-detail geometry.
 
-Read the [Visual system](docs/visual-system.md).
+Read the [Visual system](docs/visual-system.md) and [Chicago Kit v2 art bible](docs/CHICAGO_KIT_V2.md).
 
 ## Quick start
 
@@ -103,7 +103,7 @@ You can also pass a public Git URL. Open `/?project=my-city` after compilation. 
 - Press `Cmd/Ctrl+K` to search and `H` to toggle the HUD.
 - Use 探索 / 地图 / 流动 / 回放 to separate city experience, repository ownership, evidence journeys, and Git evolution.
 - In Flow or Replay, press `Space` to play/pause; use arrow keys to step through a flow.
-- Press `1`–`6` for the street, storefront, river/bridge, glass-facade, city-composition, and public-alpha hero cameras.
+- Press `1`–`8` for the street, storefront, river/bridge, glass-facade, city-composition, public-alpha hero, civic, and riverfront-review cameras.
 
 ## Validate
 

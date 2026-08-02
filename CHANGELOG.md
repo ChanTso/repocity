@@ -11,11 +11,14 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 - Explicit City Context / Semantic Ownership / Static Relationship / Evidence Journey / Replay Event legend.
 - Deterministic Living Streets plans for connected road lanes, public-frontage pedestrians, crossings, bridge walks, riverwalks, and channel-bound boats.
 - Instance-batched ambient vehicles, shared night lights, fixed-camera review captures, motion evidence, diagnostics, and route-invariant tests.
+- Deterministic Chicago Kit v2 visual signatures for every semantic-core envelope, nine modular facade families, three geometric curtain-wall systems, fitted bays/floors, active ground floors, and family-based context-ring LOD.
+- Original, reproducible City Kit v2 GLB catalogs with hashes, licensing manifest, visual checkpoints, performance evidence, and semantic-boundary tests.
 
 ### Changed
 
 - Flow retains a reduced deterministic ambient cohort instead of presenting an empty city; ambient traffic remains explicitly non-semantic and non-telemetric.
 - Ambient playback remains independent from Flow evidence pause; Map and Replay keep the same cohort visually subordinate.
+- Full-city architecture is selected from urban zone and spatial conditions rather than component identity or display color; selection continues to resolve existing semantic owners.
 
 This section describes an unmerged development candidate and does not announce a v0.2 release or schedule.
 

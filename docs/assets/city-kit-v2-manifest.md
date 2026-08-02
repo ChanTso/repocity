@@ -21,4 +21,3 @@ Every GLB contains these roots: `base`, `middle-rhythm-1`, `middle-rhythm-2`, `m
 `catalog.json` records the same file inventory, sizes, hashes, roots, source, classification, and license for automated validation. It is 100% repository-owned metadata.
 
 No new texture files are required. Runtime wall, frame, roof, glass, interior, road, and ground responses use repository-authored `MeshStandardMaterial` parameters. This avoids an untracked image-license surface while the renderer remains stylized.
-

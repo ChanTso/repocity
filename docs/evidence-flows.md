@@ -30,4 +30,6 @@ Ambient routes are derived once from compiled urban fabric and carry no evidence
 
 Living Streets expands that context with continuous closed lane loops, segment-validated public-frontage and entrance walks, declared crossings, bridge approaches, riverwalks, and opposing offscreen-wrapped channel boats. The cohort is seeded and budgeted from city scale only. Ambient density never represents file importance, runtime load, production traffic, or journey volume. Development diagnostics report planned/enabled ambient counts separately from evidence playback and the exact `journey.tokens.length`; no camera-visible count is claimed.
 
+Chicago Kit v2 changes only the architecture surrounding those paths. Its facade, storefront, entrance, and context modules never receive journey IDs, relation IDs, evidence tokens, or provenance UI. Flow pause and ambient motion remain independent.
+
 See [V3 Flow City specification](V3_FLOW_CITY_SPEC.md) for the longer design target and current boundary.
