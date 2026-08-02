@@ -12,7 +12,7 @@ Navigate components, modules, files, symbols, dependencies, Git history, and evi
 
 </div>
 
-![RepoCity city overview](docs/media/repocity-hero.png)
+![RepoCity semantic city with evidence-backed flows](docs/media/repocity-hero.png)
 
 > [!IMPORTANT]
 > RepoCity is an experimental public alpha. Its repository-semantic mapping and evidence-backed journeys are functional; the renderer, supported repository coverage, and semantic zoom remain active prototypes.
