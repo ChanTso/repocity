@@ -190,6 +190,8 @@ export function sampleAmbientAgentInto(
     routeProgress = cycleDistance <= 1 ? cycleDistance : 2 - cycleDistance;
     tangentDirection = cycleDistance <= 1 ? 1 : -1;
   } else {
+    // Closed loops and offscreen wraps store canonical forward points. Their
+    // declared direction is the only source of truth for runtime traversal.
     const forwardProgress = wrap(cycleDistance, 1);
     routeProgress = route.direction > 0 ? forwardProgress : 1 - forwardProgress;
     tangentDirection = route.direction;

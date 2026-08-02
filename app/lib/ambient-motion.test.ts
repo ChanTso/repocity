@@ -36,6 +36,56 @@ const distance = (
   right: { x: number; z: number },
 ) => Math.hypot(left.x - right.x, left.z - right.z);
 
+function firstForwardHorizontalProgress(
+  route: NonNullable<ReturnType<typeof prepareAmbientMotionRoute>>,
+): number {
+  let best: { length: number; progress: number } | null = null;
+  for (let index = 1; index < route.points.length; index += 1) {
+    const start = route.points[index - 1]!;
+    const end = route.points[index]!;
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const length = Math.hypot(dx, dz);
+    if (dx <= 0 || Math.abs(dx) <= Math.abs(dz) * 4) continue;
+    const midpoint =
+      (route.cumulativeLengths[index - 1]! + route.cumulativeLengths[index]!) / 2;
+    if (!best || length > best.length) {
+      best = { length, progress: midpoint / route.length };
+    }
+  }
+  if (!best) throw new Error(`No canonical forward horizontal segment on ${route.id}`);
+  return best.progress;
+}
+
+function sampleDeclaredDirection(
+  route: NonNullable<ReturnType<typeof prepareAmbientMotionRoute>>,
+  canonicalProgress: number,
+) {
+  return sampleAmbientAgent(
+    route,
+    {
+      mode: "car",
+      phase: route.direction > 0 ? canonicalProgress : 1 - canonicalProgress,
+      speed: 1,
+      delay: 0,
+      dwellSeconds: 0,
+    },
+    0,
+  );
+}
+
+function generatedBlockRoute(direction: 1 | -1) {
+  for (let index = 0; index < 16; index += 1) {
+    const candidate = planAmbientMobility({
+      urbanFabric: fabric,
+      visualCity: visual,
+      seed: `ambient-block-direction-${index}`,
+    }).roadRoutes.find((route) => route.blockId && route.direction === direction);
+    if (candidate) return candidate;
+  }
+  throw new Error(`No generated block route for direction ${direction}`);
+}
+
 describe("ambient runtime motion", () => {
   it("prepares a real final-to-first segment for every closed route", () => {
     const routes = allAmbientRoutes(plan).filter(
@@ -78,6 +128,43 @@ describe("ambient runtime motion", () => {
       expect(Math.hypot(afterTangent.x, afterTangent.z)).toBeGreaterThan(0.99);
     }
   });
+
+  it("moves opposing bridge lanes in opposite directions on the same bridge", () => {
+    const bridgeRoutes = plan.roadRoutes
+      .filter((route) => route.id.startsWith("road:bridge-loop:"))
+      .sort((left, right) => left.direction - right.direction);
+    expect(bridgeRoutes).toHaveLength(2);
+    expect(Math.sign(bridgeRoutes[0]!.laneOffset)).toBe(
+      -Math.sign(bridgeRoutes[1]!.laneOffset),
+    );
+
+    const prepared = bridgeRoutes.map((route) => prepareAmbientMotionRoute(route)!);
+    const samples = prepared.map((route) =>
+      sampleDeclaredDirection(route, firstForwardHorizontalProgress(route)),
+    );
+    const tangentDot =
+      samples[0]!.tangent.x * samples[1]!.tangent.x +
+      samples[0]!.tangent.z * samples[1]!.tangent.z;
+    expect(tangentDot).toBeLessThan(-0.9);
+  });
+
+  it.each([
+    [1, "clockwise", 1],
+    [-1, "counter", -1],
+  ] as const)(
+    "moves a generated direction %s block route in declared %s circulation",
+    (direction, label, expectedTangentX) => {
+      const route = generatedBlockRoute(direction);
+      expect(route.id).toContain(`:${label}`);
+      const prepared = prepareAmbientMotionRoute(route)!;
+      const sample = sampleDeclaredDirection(
+        prepared,
+        firstForwardHorizontalProgress(prepared),
+      );
+      expect(Math.sign(sample.tangent.x)).toBe(expectedTangentX);
+      expect(Math.abs(sample.tangent.x)).toBeGreaterThan(0.9);
+    },
+  );
 
   it("completes a deterministic 120 second soak without a closed-route teleport", () => {
     for (const route of allAmbientRoutes(plan).filter(
@@ -148,6 +235,46 @@ describe("ambient runtime motion", () => {
       expect(new Set(agents.map((agent) => agent.speed)).size).toBe(1);
       expect(new Set(agents.map((agent) => agent.delay)).size).toBe(1);
       expect(new Set(agents.map((agent) => agent.dwellSeconds)).size).toBe(1);
+    }
+  });
+
+  it("preserves the accepted route, agent and non-evidence diagnostic baseline", () => {
+    expect(plan.budgets).toEqual({
+      roadVehicles: 32,
+      pedestrians: 48,
+      boats: 3,
+    });
+    expect({
+      roadRoutes: plan.roadRoutes.length,
+      pedestrianRoutes: plan.pedestrianRoutes.length,
+      waterRoutes: plan.waterRoutes.length,
+      agents: plan.agents.length,
+    }).toEqual({
+      roadRoutes: 7,
+      pedestrianRoutes: 17,
+      waterRoutes: 2,
+      agents: 83,
+    });
+    expect(plan.diagnostics).toEqual({
+      roadRouteCount: 7,
+      pedestrianRouteCount: 17,
+      waterRouteCount: 2,
+      vehicleCount: 32,
+      pedestrianCount: 48,
+      boatCount: 3,
+      bridgeRoadRouteCount: 2,
+      crosswalkRouteCount: 5,
+      entranceRouteCount: 4,
+      riverwalkRouteCount: 2,
+      invalidEntranceRouteCount: 0,
+      priorityRoadRouteId: null,
+      priorityRoadAllocation: 0,
+      priorityRoadCapacity: 0,
+      serializedBytes: 55_333,
+    });
+    for (const route of allAmbientRoutes(plan)) {
+      expect(route.evidenceRelationIds).toEqual([]);
+      expect(route.journeyIds).toEqual([]);
     }
   });
 

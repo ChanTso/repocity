@@ -518,21 +518,26 @@ function roadCandidateForBlock(
     frame.south.id,
     frame.west.id,
   ];
-  const clockwise = [
+  // Both physical lanes use the same canonical topological order. The runtime
+  // consumes `direction` as the single source of truth for circulation.
+  const clockwiseLaneForward = [
     point(frame.westX + lane, frame.northZ + lane, "road-lane", frame.north.id),
     point(frame.eastX - lane, frame.northZ + lane, "road-lane", frame.east.id),
     point(frame.eastX - lane, frame.southZ - lane, "road-lane", frame.south.id),
     point(frame.westX + lane, frame.southZ - lane, "road-lane", frame.west.id),
   ];
-  const counterClockwise = [
+  const counterLaneForward = [
     point(frame.westX - lane, frame.northZ - lane, "road-lane", frame.west.id),
-    point(frame.westX - lane, frame.southZ + lane, "road-lane", frame.south.id),
-    point(frame.eastX + lane, frame.southZ + lane, "road-lane", frame.east.id),
     point(frame.eastX + lane, frame.northZ - lane, "road-lane", frame.north.id),
+    point(frame.eastX + lane, frame.southZ + lane, "road-lane", frame.east.id),
+    point(frame.westX - lane, frame.southZ + lane, "road-lane", frame.south.id),
   ];
   return {
     id: `road:block:${block.id}:${direction > 0 ? "clockwise" : "counter"}`,
-    points: smoothClosedCorners(direction > 0 ? clockwise : counterClockwise, 1.12),
+    points: smoothClosedCorners(
+      direction > 0 ? clockwiseLaneForward : counterLaneForward,
+      1.12,
+    ),
     motionStrategy: "closed-loop",
     direction,
     blockId: block.id,
@@ -574,21 +579,27 @@ function bridgeLoopCandidate(
     )[0];
   if (!westStreet || !eastStreet) return null;
   const lane = clamp(Math.min(lower.width, upper.width) * 0.23, 0.72, 1.05);
-  const clockwise = [
+  // Lane geometry differs, but both arrays advance west-to-east over the lower
+  // bridge before returning over the upper bridge. Runtime direction reverses
+  // only the declared counter lane.
+  const clockwiseLaneForward = [
     point(westX + lane, lowerZ + lane, "bridge-lane", lower.id),
     point(eastX - lane, lowerZ + lane, "bridge-lane", lower.id),
     point(eastX - lane, upperZ - lane, "road-lane", eastStreet.id),
     point(westX + lane, upperZ - lane, "bridge-lane", upper.id),
   ];
-  const counter = [
+  const counterLaneForward = [
     point(westX - lane, lowerZ - lane, "bridge-lane", lower.id),
-    point(westX - lane, upperZ + lane, "road-lane", westStreet.id),
-    point(eastX + lane, upperZ + lane, "bridge-lane", upper.id),
     point(eastX + lane, lowerZ - lane, "road-lane", eastStreet.id),
+    point(eastX + lane, upperZ + lane, "bridge-lane", upper.id),
+    point(westX - lane, upperZ + lane, "road-lane", westStreet.id),
   ];
   return {
     id: `road:bridge-loop:${direction > 0 ? "clockwise" : "counter"}`,
-    points: smoothClosedCorners(direction > 0 ? clockwise : counter, 1.1).map((p) => ({
+    points: smoothClosedCorners(
+      direction > 0 ? clockwiseLaneForward : counterLaneForward,
+      1.1,
+    ).map((p) => ({
       ...p,
       surface:
         p.streetId === lower.id || p.streetId === upper.id
