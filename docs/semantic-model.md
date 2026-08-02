@@ -16,6 +16,18 @@ RepoCity uses a repository-semantic graph as its source of truth. The city is a 
 
 One semantic container can span multiple buildings when scale requires it. Selection therefore follows semantic ownership rather than assuming one building equals one file.
 
+The Semantic Lens presents the authoritative chain explicitly:
+
+```text
+repository facts
+→ semantic ownership
+→ deterministic spatial projection
+→ non-semantic urban context
+→ evidence journeys
+```
+
+Map selection resolves stable component, block, semantic-building, file, entrance, and address IDs. The breadcrumb renders only levels supported by those mappings. Repository facts decide ownership; deterministic planners decide physical placement; architectural subdivisions and decoration do not create repository entities.
+
 ## Stable identity
 
 Entity IDs are deterministic. Rename detection preserves identity; delete followed by a new add creates a new entity. Layout uses historical maximum metrics so replay changes state without moving the city.
@@ -23,5 +35,7 @@ Entity IDs are deterministic. Rename detection preserves identity; delete follow
 ## Context versus evidence
 
 Storefronts, street furniture, parked vehicles, ambient traffic, people, vegetation, and architectural trim are non-semantic context unless a future evidence source explicitly promotes them. They may improve legibility and scale but cannot claim repository or runtime meaning.
+
+The inspector’s “为什么在这里？” section reports the grouping and placement rules separately. It does not infer importance, quality, runtime frequency, production traffic, or architectural meaning from location or appearance.
 
 See [Architecture](ARCHITECTURE.md) and [Data format](DATA_FORMAT.md) for implementation details.

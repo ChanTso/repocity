@@ -37,7 +37,7 @@ Districts provide component-level context. Buildings stay linked to real reposit
 - Components distributed across connected districts and blocks
 - Building, module-group, file, symbol, and export inspection
 - Evidence-backed repository and delivery journeys
-- Search, selection, focus, Git-history replay, and semantic flow modes
+- Explore, semantic Map, evidence Flow, and Git-history Replay modes
 - River, bridge, street, transit, and asset-backed hero-district context
 - Explicit provenance for inferred and simulated information
 - Local analysis that does not execute the target repository
@@ -46,7 +46,7 @@ Districts provide component-level context. Buildings stay linked to real reposit
 
 ![RepoCity evidence-backed flow](docs/media/repocity-flow.png)
 
-Flow mode turns supported repository relationships into inspectable journeys. Routes identify their provenance and evidence. They are deliberately separate from ambient vehicles and people, which are non-semantic urban context.
+Flow mode turns supported repository relationships into inspectable journeys. Routes identify their provenance and evidence. Reduced ambient vehicles and people remain visible for city scale, but the persistent legend and rendering language identify them as deterministic, non-semantic context rather than telemetry.
 
 Read [Evidence flows](docs/evidence-flows.md).
 
@@ -54,7 +54,7 @@ Read [Evidence flows](docs/evidence-flows.md).
 
 ![RepoCity semantic inspector](docs/media/repocity-inspector.png)
 
-Select an urban object to inspect the repository entities assigned to it and move from city-level context toward modules, files, symbols, exports, dependencies, and Git history.
+Map mode reduces the city context and exposes component ownership, semantic building envelopes, stable addresses, one-hop relations, and a repository-to-symbol breadcrumb. Select a file to inspect its repository facts and the deterministic rules behind “为什么在这里？”.
 
 Read the [Semantic model](docs/semantic-model.md).
 
@@ -98,6 +98,7 @@ You can also pass a public Git URL. Open `/?project=my-city` after compilation. 
 - Drag to orbit; scroll to zoom; right-drag to pan.
 - Click to select; double-click or press `F` to focus the selection.
 - Press `Cmd/Ctrl+K` to search and `H` to toggle the HUD.
+- Use 探索 / 地图 / 流动 / 回放 to separate city experience, repository ownership, evidence journeys, and Git evolution.
 - In Flow or Replay, press `Space` to play/pause; use arrow keys to step through a flow.
 - Press `1`–`6` for the street, storefront, river/bridge, glass-facade, city-composition, and public-alpha hero cameras.
 
@@ -140,7 +141,7 @@ Available now:
 - component, building/module-group, file, symbol, and export-oriented inspection;
 - inferred and simulated evidence journeys;
 - original asset-backed hero district and simplified outer-city LOD;
-- desktop Explore, Flow, and Replay experiences.
+- desktop Explore, Map, Flow, and Replay experiences.
 
 Known limitations:
 
