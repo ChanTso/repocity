@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   AMBIENT_CONTEXT_CLASSIFICATION,
   allAmbientRoutes,
+  deriveAmbientPublicFrontages,
   planAmbientMobility,
+  pointInsidePolygon,
+  projectPointToPolyline,
   resolvePublicEntrancePoint,
+  roadRouteCapacity,
+  rotatedBuildingFootprint,
+  sampleRoutePolyline,
   type AmbientMobilityRoute,
   type AmbientPublicFrontage,
 } from "./ambient-mobility";
@@ -13,6 +19,7 @@ import { planSemanticCity } from "./semantic-city";
 import { isSemanticSelectableKind } from "./semantic-lens";
 import { planUrbanFabric, type UrbanStreet } from "./urban-fabric";
 import { planVisualCity } from "./visual-city";
+import { planAssetBackedHero } from "./asset-city";
 
 const living = planLivingCity(demoProject);
 const semantic = planSemanticCity({
@@ -81,10 +88,8 @@ function streetsConnect(left: UrbanStreet, right: UrbanStreet): boolean {
 }
 
 function isInsideBuilding(point: CityPoint): boolean {
-  return fabric.buildings.some(
-    (building) =>
-      Math.abs(point.x - building.x) < building.width / 2 - 0.02 &&
-      Math.abs(point.z - building.z) < building.depth / 2 - 0.02,
+  return fabric.buildings.some((building) =>
+    pointInsidePolygon(point, rotatedBuildingFootprint(building, 0.02)),
   );
 }
 
@@ -188,9 +193,9 @@ describe("ambient mobility planning", () => {
     const streetById = new Map(fabric.streets.map((street) => [street.id, street]));
     for (const route of plan.roadRoutes) {
       const streets = route.sourceStreetIds.map((id) => streetById.get(id)!);
-      for (let index = 1; index < route.points.length; index += 1) {
-        const start = route.points[index - 1]!;
-        const end = route.points[index]!;
+      for (let index = 0; index < route.points.length; index += 1) {
+        const start = route.points[index]!;
+        const end = route.points[(index + 1) % route.points.length]!;
         for (const progress of [0, 0.25, 0.5, 0.75, 1]) {
           const candidate = {
             x: start.x + (end.x - start.x) * progress,
@@ -256,9 +261,95 @@ describe("ambient mobility planning", () => {
     const plan = planAmbientMobility(input);
     expect(
       plan.pedestrianRoutes
-        .flatMap((route) => route.points)
+        .flatMap((route) =>
+          sampleRoutePolyline(
+            route.points,
+            0.2,
+            route.motionStrategy === "closed-loop",
+          ),
+        )
         .every((candidate) => !isInsideBuilding(candidate)),
     ).toBe(true);
+  });
+
+  it("keeps sampled pedestrians out of traffic lanes unless the route declares a crossing", () => {
+    const plan = planAmbientMobility(input);
+    const groundStreets = fabric.streets.filter((street) => street.surface === "ground");
+    for (const route of plan.pedestrianRoutes) {
+      if (route.points.some((point) => point.surface === "crosswalk")) continue;
+      if (route.points.some((point) => point.surface === "bridge-walk")) continue;
+      for (const sample of sampleRoutePolyline(
+        route.points,
+        0.2,
+        route.motionStrategy === "closed-loop",
+      )) {
+        const insideTrafficLane = groundStreets.some(
+          (street) => distanceToStreet(sample, street) < street.width / 2 - 0.08,
+        );
+        expect(insideTrafficLane).toBe(false);
+      }
+    }
+  });
+
+  it("keeps the closing edge of every sidewalk loop on its connected public verge", () => {
+    const plan = planAmbientMobility(input);
+    const streetById = new Map(fabric.streets.map((street) => [street.id, street]));
+    for (const route of plan.pedestrianRoutes.filter(
+      (candidate) => candidate.id.startsWith("pedestrian:block:"),
+    )) {
+      const start = route.points.at(-1)!;
+      const end = route.points[0]!;
+      const streets = route.sourceStreetIds.map((id) => streetById.get(id)!);
+      for (const sample of sampleRoutePolyline([start, end], 0.2)) {
+        const publicVerge = streets.some((street) => {
+          const distance = distanceToStreet(sample, street);
+          return distance >= street.width / 2 - 0.08 &&
+            distance <= street.width / 2 + 0.9;
+        });
+        expect(publicVerge).toBe(true);
+      }
+    }
+  });
+
+  it("projects generic entrances onto sidewalk segments and validates the full approach", () => {
+    const plan = planAmbientMobility(input);
+    const entrances = plan.pedestrianRoutes.filter((route) =>
+      route.id.startsWith("pedestrian:entrance:"),
+    );
+    expect(entrances.length).toBeGreaterThan(0);
+    for (const route of entrances) {
+      const building = fabric.buildings.find(
+        (candidate) => route.id === `pedestrian:entrance:${candidate.id}`,
+      )!;
+      const loop = plan.pedestrianRoutes.find(
+        (candidate) => candidate.id === `pedestrian:block:${building.blockId}`,
+      )!;
+      const projection = projectPointToPolyline(route.points[0]!, loop.points, true);
+      expect(projection?.distance).toBeLessThan(0.002);
+      expect(route.motionStrategy).toBe("ping-pong");
+      for (const sample of sampleRoutePolyline(route.points, 0.15)) {
+        expect(isInsideBuilding(sample)).toBe(false);
+        const inWater =
+          sample.x > visual.river.minX &&
+          sample.x < visual.river.maxX &&
+          sample.z > visual.river.minZ &&
+          sample.z < visual.river.maxZ;
+        expect(inWater).toBe(false);
+      }
+    }
+  });
+
+  it("handles rotated footprints for point and segment-level pedestrian validation", () => {
+    const rotated = {
+      x: 0,
+      z: 0,
+      width: 8,
+      depth: 2,
+      rotation: Math.PI / 4,
+    };
+    const polygon = rotatedBuildingFootprint(rotated as typeof fabric.buildings[number]);
+    expect(pointInsidePolygon({ x: 2, z: -2 }, polygon)).toBe(true);
+    expect(pointInsidePolygon({ x: 3.5, z: 3.5 }, polygon)).toBe(false);
   });
 
   it("binds every entrance dwell to a real public entrance", () => {
@@ -305,6 +396,48 @@ describe("ambient mobility planning", () => {
     expect(
       plan.agents.filter((agent) => agent.routeId === route?.id),
     ).toHaveLength(8);
+  });
+
+  it("covers the production hero frontage data and counts unsafe routes honestly", () => {
+    const assetHero = planAssetBackedHero(fabric, visual);
+    const frontages = deriveAmbientPublicFrontages(assetHero, fabric);
+    const plan = planAmbientMobility({ ...input, publicFrontages: frontages });
+    const generated = plan.pedestrianRoutes.filter((route) =>
+      route.id.startsWith("pedestrian:frontage:"),
+    );
+    expect(frontages.length).toBe(assetHero.buildings.length);
+    expect(generated.length).toBeGreaterThan(0);
+    expect(generated.length + plan.diagnostics.invalidEntranceRouteCount).toBeGreaterThanOrEqual(frontages.length);
+    expect(generated.some((route) =>
+      frontages.find((frontage) => frontage.priority)?.id ===
+        route.id.replace("pedestrian:frontage:", ""),
+    )).toBe(true);
+    for (const route of generated) {
+      expect(sampleRoutePolyline(route.points, 0.15).every((sample) => !isInsideBuilding(sample))).toBe(true);
+    }
+  });
+
+  it("resolves the production priority road structurally and respects capacity", () => {
+    const assetHero = planAssetBackedHero(fabric, visual);
+    const plan = planAmbientMobility({
+      ...input,
+      publicFrontages: deriveAmbientPublicFrontages(assetHero, fabric),
+    });
+    const route = plan.roadRoutes.find(
+      (candidate) => candidate.id === plan.diagnostics.priorityRoadRouteId,
+    );
+    expect(route).toBeTruthy();
+    expect(route?.blockId).toBe(
+      fabric.architecturalEnvelopes.find(
+        (envelope) =>
+          envelope.id ===
+          deriveAmbientPublicFrontages(assetHero, fabric).find((frontage) => frontage.priority)?.envelopeId,
+      )?.blockId,
+    );
+    expect(plan.diagnostics.priorityRoadAllocation).toBeGreaterThan(0);
+    expect(plan.diagnostics.priorityRoadAllocation).toBeLessThanOrEqual(roadRouteCapacity(route!));
+    expect(plan.diagnostics.priorityRoadCapacity).toBe(roadRouteCapacity(route!));
+    expect(plan.diagnostics.vehicleCount).toBe(plan.budgets.roadVehicles);
   });
 
   it("keeps boat routes inside the navigable river channel", () => {
