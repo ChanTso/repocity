@@ -54,16 +54,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:paired-vertical-bays": "586d57b5",
-        "rhythm:tripartite-oriel-bays": "040d1f4c",
-        "rhythm:deep-reveal-grid": "4c103c56",
-        "base:stone-arcade": "342349f7",
-        "base:terra-cotta-shopfront": "4813772e",
-        "corner:expressed-corner-bay": "f3e4a247",
-        "corner:recessed-stone-corner": "7ace98e9",
-        "roof:heavy-cornice": "46b3a083",
-        "roof:parapet-roof-house": "c0584d83",
-        "roof:stepped-cornice": "ed8f7e70"
+        "rhythm:paired-vertical-bays": "3e04c08e",
+        "rhythm:tripartite-oriel-bays": "34e056ac",
+        "rhythm:deep-reveal-grid": "c83fa9b7",
+        "base:stone-arcade": "7c306129",
+        "base:terra-cotta-shopfront": "3e04c12a",
+        "corner:expressed-corner-bay": "91a481d8",
+        "corner:recessed-stone-corner": "3ef0f1db",
+        "roof:heavy-cornice": "d74a9430",
+        "roof:parapet-roof-house": "f21b214b",
+        "roof:stepped-cornice": "d14a2386"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -115,16 +115,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:four-foot-steel-grid": "549cf9b1",
-        "rhythm:wide-structural-bays": "162a0e20",
-        "rhythm:double-mullion-grid": "e58790ea",
-        "base:transparent-plaza-lobby": "e7a04aeb",
-        "base:dark-stone-lobby": "3eb54d9a",
-        "corner:wrapped-glass-corner": "8abc7cf3",
-        "corner:expressed-steel-corner": "c239653d",
-        "roof:restrained-mechanical-top": "63d2f2f7",
-        "roof:recessed-screen": "ef958baf",
-        "roof:flat-grid-cap": "7b60301c"
+        "rhythm:four-foot-steel-grid": "b95e5d4a",
+        "rhythm:wide-structural-bays": "02decc50",
+        "rhythm:double-mullion-grid": "63139af3",
+        "base:transparent-plaza-lobby": "c3abad2d",
+        "base:dark-stone-lobby": "bad8486e",
+        "corner:wrapped-glass-corner": "01fe3994",
+        "corner:expressed-steel-corner": "9095c117",
+        "roof:restrained-mechanical-top": "5cc8cbbc",
+        "roof:recessed-screen": "6afd651f",
+        "roof:flat-grid-cap": "1c31abea"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -176,16 +176,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:unitized-vision-spandrel": "f81a2f8c",
-        "rhythm:offset-panel-grid": "15c4f1ff",
-        "rhythm:corner-glass-grid": "f591eeed",
-        "base:clear-corner-lobby": "076a8e9a",
-        "base:stone-podium-lobby": "ff564cbf",
-        "corner:clear-glass-corner": "eb776906",
-        "corner:recessed-panel-corner": "013ca10a",
-        "roof:glass-screen-top": "7930772a",
-        "roof:offset-roof-house": "d801b45c",
-        "roof:thin-metal-cap": "a7c1cd0b"
+        "rhythm:unitized-vision-spandrel": "47881593",
+        "rhythm:offset-panel-grid": "741a9fb9",
+        "rhythm:corner-glass-grid": "34515fec",
+        "base:clear-corner-lobby": "9eec8dee",
+        "base:stone-podium-lobby": "14e7e1c9",
+        "corner:clear-glass-corner": "d238d39b",
+        "corner:recessed-panel-corner": "4518f072",
+        "roof:glass-screen-top": "08437249",
+        "roof:offset-roof-house": "c6b12352",
+        "roof:thin-metal-cap": "b833193d"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -237,16 +237,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:close-bronze-fins": "e7e1b3c7",
-        "rhythm:wide-bronze-fins": "f3faca9e",
-        "rhythm:paired-river-fins": "4851e6e4",
-        "base:bronze-river-lobby": "f96d4b2d",
-        "base:granite-podium": "de013940",
-        "corner:bronze-fin-corner": "55458e01",
-        "corner:wrapped-river-corner": "010cb04f",
-        "roof:bronze-fin-crown": "f1789901",
-        "roof:terraced-top": "82be5ec5",
-        "roof:recessed-mechanical": "037a5876"
+        "rhythm:close-bronze-fins": "a7d3fb70",
+        "rhythm:wide-bronze-fins": "b67df6d2",
+        "rhythm:paired-river-fins": "7d83f209",
+        "base:bronze-river-lobby": "826107af",
+        "base:granite-podium": "dab66e60",
+        "corner:bronze-fin-corner": "35c6e4e2",
+        "corner:wrapped-river-corner": "d779072d",
+        "roof:bronze-fin-crown": "68974f7a",
+        "roof:terraced-top": "76ac79c5",
+        "roof:recessed-mechanical": "62282948"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -298,16 +298,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:broad-punched-windows": "e48ec436",
-        "rhythm:paired-loft-bays": "66d470b1",
-        "rhythm:loading-bay-rhythm": "1ffe848b",
-        "base:adaptive-reuse-shops": "a4bf88e8",
-        "base:loading-trace-base": "84c76a19",
-        "corner:heavy-masonry-corner": "89ff89a8",
-        "corner:recessed-loading-corner": "411a5cb8",
-        "roof:warehouse-parapet": "89c19bf8",
-        "roof:sawtooth-trace": "af72a166",
-        "roof:glass-rooftop-addition": "18b890e1"
+        "rhythm:broad-punched-windows": "c4686445",
+        "rhythm:paired-loft-bays": "b4e47aef",
+        "rhythm:loading-bay-rhythm": "65d95286",
+        "base:adaptive-reuse-shops": "de8334fc",
+        "base:loading-trace-base": "84cd78cf",
+        "corner:heavy-masonry-corner": "dea45615",
+        "corner:recessed-loading-corner": "66a4706c",
+        "roof:warehouse-parapet": "bf806fdb",
+        "roof:sawtooth-trace": "45decbc4",
+        "roof:glass-rooftop-addition": "8f7a04d7"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -359,16 +359,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:two-bay-shop-house": "4d7e1d8f",
-        "rhythm:three-bay-commercial": "feebce16",
-        "rhythm:single-bay-infill": "d29ce87c",
-        "base:canvas-awning-shops": "500db005",
-        "base:recessed-retail-bays": "17663488",
-        "corner:chamfered-shop-corner": "2691fa49",
-        "corner:expressed-party-wall": "48222227",
-        "roof:party-wall-parapet": "7b1de559",
-        "roof:small-cornice": "24beb4cd",
-        "roof:stepped-row-top": "0107f08e"
+        "rhythm:two-bay-shop-house": "1e4850b8",
+        "rhythm:three-bay-commercial": "4a9ae7ea",
+        "rhythm:single-bay-infill": "2b05b341",
+        "base:canvas-awning-shops": "381d4ce7",
+        "base:recessed-retail-bays": "ca920318",
+        "corner:chamfered-shop-corner": "b0f35aca",
+        "corner:expressed-party-wall": "d6663e25",
+        "roof:party-wall-parapet": "6c9f3d32",
+        "roof:small-cornice": "4594eefd",
+        "roof:stepped-row-top": "d7139d90"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -420,16 +420,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:fluted-vertical-bays": "2ddd7887",
-        "rhythm:stepped-spandrel-bays": "c43809de",
-        "rhythm:recessed-pier-bays": "5ce3ac24",
-        "base:granite-portal-base": "8232afed",
-        "base:limestone-arcade": "cf80d900",
-        "corner:fluted-corner": "bc47c6c1",
-        "corner:stepped-chamfer-corner": "0d193d8f",
-        "roof:deco-stepped-crown": "be26a341",
-        "roof:fluted-roof-house": "13056285",
-        "roof:shouldered-cap": "919c0536"
+        "rhythm:fluted-vertical-bays": "d911e3b0",
+        "rhythm:stepped-spandrel-bays": "9885c392",
+        "rhythm:recessed-pier-bays": "693a4fc9",
+        "base:granite-portal-base": "0e71a7ef",
+        "base:limestone-arcade": "dab938a0",
+        "corner:fluted-corner": "c52c1522",
+        "corner:stepped-chamfer-corner": "65fe36ed",
+        "roof:deco-stepped-crown": "a420ee3a",
+        "roof:fluted-roof-house": "d97b6e05",
+        "roof:shouldered-cap": "03618a88"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -481,16 +481,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:monumental-bays": "f56d09a4",
-        "rhythm:paired-public-windows": "3140b887",
-        "rhythm:restrained-colonnade": "1bfe9bd5",
-        "base:monumental-public-entry": "22e29722",
-        "base:formal-colonnade": "3fc6a4f7",
-        "corner:monumental-corner-pier": "8ed7a41e",
-        "corner:restrained-chamfer": "08b69592",
-        "roof:formal-cornice": "4b73c2f2",
-        "roof:restrained-civic-crown": "38316554",
-        "roof:setback-roof-house": "5b445d53"
+        "rhythm:monumental-bays": "78920a4b",
+        "rhythm:paired-public-windows": "fe50c5e1",
+        "rhythm:restrained-colonnade": "7bd7d234",
+        "base:monumental-public-entry": "ab43a5f6",
+        "base:formal-colonnade": "1d989fb1",
+        "corner:monumental-corner-pier": "a8ee6ef3",
+        "corner:restrained-chamfer": "debe0a3a",
+        "roof:formal-cornice": "52af9311",
+        "roof:restrained-civic-crown": "3d6f8a7a",
+        "roof:setback-roof-house": "f7983355"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     },
@@ -542,16 +542,16 @@
         "rear-service"
       ],
       "variantFingerprints": {
-        "rhythm:terrace-unitized-grid": "c1b722ce",
-        "rhythm:river-corner-glass": "5e1e4eb9",
-        "rhythm:vertical-slab-bays": "ad9da2d3",
-        "base:transparent-river-lobby": "c06ebb70",
-        "base:terraced-podium": "3f92ef71",
-        "corner:wrapped-terrace-corner": "6889d280",
-        "corner:bronze-river-corner": "319baec0",
-        "roof:terraced-crown": "edc8b420",
-        "roof:tapered-screen": "28ee8f7e",
-        "roof:bronze-slab-top": "dbcb5889"
+        "rhythm:terrace-unitized-grid": "7f1af43d",
+        "rhythm:river-corner-glass": "a5615cd7",
+        "rhythm:vertical-slab-bays": "9b39d66e",
+        "base:transparent-river-lobby": "b9b56664",
+        "base:terraced-podium": "24aff277",
+        "corner:wrapped-terrace-corner": "25d1e58d",
+        "corner:bronze-river-corner": "6dbc8af4",
+        "roof:terraced-crown": "7cbc9e83",
+        "roof:tapered-screen": "9549ca0c",
+        "roof:bronze-slab-top": "890205ef"
       },
       "usage": "tooling-reference-runtime-procedural-parity"
     }

@@ -7,22 +7,22 @@
     "hysteresis": 7
   },
   "rhythmRecipes": [
-    { "grouping": 1, "windowWidth": 0.58, "windowHeight": 0.54, "reveal": 0.09, "pier": 0.13, "band": 0.08, "offset": 0 },
-    { "grouping": 2, "windowWidth": 0.72, "windowHeight": 0.62, "reveal": 0.13, "pier": 0.09, "band": 0.12, "offset": 0.08 },
-    { "grouping": 3, "windowWidth": 0.82, "windowHeight": 0.7, "reveal": 0.06, "pier": 0.065, "band": 0.055, "offset": -0.07 }
+    { "primitive": "single-recess", "grouping": 1, "windowWidth": 0.58, "windowHeight": 0.54, "reveal": 0.09, "pier": 0.13, "band": 0.08, "offset": 0 },
+    { "primitive": "paired-oriel", "grouping": 2, "windowWidth": 0.72, "windowHeight": 0.62, "reveal": 0.13, "pier": 0.09, "band": 0.12, "offset": 0.08 },
+    { "primitive": "deep-reveal", "grouping": 3, "windowWidth": 0.82, "windowHeight": 0.7, "reveal": 0.06, "pier": 0.065, "band": 0.055, "offset": -0.07 }
   ],
   "baseRecipes": [
-    { "heightScale": 1, "openingWidth": 0.72, "pierCadence": 1, "recess": 0.11, "canopyDepth": 0.42, "plinthHeight": 0.16 },
-    { "heightScale": 1.18, "openingWidth": 0.56, "pierCadence": 2, "recess": 0.23, "canopyDepth": 0.68, "plinthHeight": 0.3 }
+    { "primitive": "arcade-opening", "heightScale": 1, "openingWidth": 0.72, "pierCadence": 1, "recess": 0.11, "canopyDepth": 0.42, "plinthHeight": 0.16 },
+    { "primitive": "recessed-lobby", "heightScale": 1.18, "openingWidth": 0.56, "pierCadence": 2, "recess": 0.23, "canopyDepth": 0.68, "plinthHeight": 0.3 }
   ],
   "cornerRecipes": [
-    { "width": 0.3, "depth": 0.2, "projection": 0.08, "rotation": 0, "wrapGlass": 0.22, "fins": 1 },
-    { "width": 0.5, "depth": 0.28, "projection": 0.16, "rotation": 0.785398, "wrapGlass": 0.5, "fins": 3 }
+    { "primitive": "expressed-pier", "width": 0.3, "depth": 0.2, "projection": 0.08, "rotation": 0, "wrapGlass": 0.22, "fins": 1 },
+    { "primitive": "chamfer-wrap", "width": 0.5, "depth": 0.28, "projection": 0.16, "rotation": 0.785398, "wrapGlass": 0.5, "fins": 3 }
   ],
   "roofRecipes": [
-    { "style": "cap", "heightScale": 0.045, "widthScale": 0.7, "depthScale": 0.66, "tiers": 1, "fins": 0, "offset": -0.08 },
-    { "style": "house", "heightScale": 0.075, "widthScale": 0.54, "depthScale": 0.5, "tiers": 2, "fins": 0, "offset": 0.11 },
-    { "style": "crown", "heightScale": 0.11, "widthScale": 0.42, "depthScale": 0.4, "tiers": 3, "fins": 3, "offset": 0 }
+    { "primitive": "cornice-cap", "style": "cap", "heightScale": 0.045, "widthScale": 0.7, "depthScale": 0.66, "tiers": 1, "fins": 0, "offset": -0.08 },
+    { "primitive": "screen-house", "style": "house", "heightScale": 0.075, "widthScale": 0.54, "depthScale": 0.5, "tiers": 2, "fins": 0, "offset": 0.11 },
+    { "primitive": "stepped-crown", "style": "crown", "heightScale": 0.11, "widthScale": 0.42, "depthScale": 0.4, "tiers": 3, "fins": 3, "offset": 0 }
   ],
   "families": {
     "chicago-school-masonry": {

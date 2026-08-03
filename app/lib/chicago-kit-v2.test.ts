@@ -29,7 +29,6 @@ import {
   chicagoVariantDefinitionFingerprint,
   stableDefinitionHash,
 } from "./chicago-kit-v2-definition";
-import { makeAssetReviewCameraPresets, planAssetBackedHero } from "./asset-city";
 import { planUrbanFabric, type UrbanCharacterZone, type UrbanFacadeFamily } from "./urban-fabric";
 import { planVisualCity } from "./visual-city";
 
@@ -54,6 +53,7 @@ function fixture() {
 const demo = fixture();
 const catalogUrl = new URL("../../public/assets/city-kit-v2/catalog.json", import.meta.url);
 const kitSourceUrl = new URL("../components/city/ChicagoKitV2.tsx", import.meta.url);
+const moduleGeometrySourceUrl = new URL("../components/city/chicago-module-geometries.ts", import.meta.url);
 const generatorUrl = new URL("../../scripts/generate-city-kit-v2.mjs", import.meta.url);
 const definitionUrl = new URL("./chicago-kit-v2-definition.json", import.meta.url);
 
@@ -347,20 +347,18 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
     expect(selectChicagoLod(lod1MaxDistance + hysteresis + 0.1, "lod1")).toBe("lod2");
   });
 
-  it("39. keeps fixed review cameras away from LOD transition bands", () => {
-    const reviewPlan = planAssetBackedHero(demo.fabric, demo.visualCity);
-    const { lod0MaxDistance, lod1MaxDistance, hysteresis } = CHICAGO_KIT_V2_DEFINITION.lod;
-    for (const camera of makeAssetReviewCameraPresets(reviewPlan, demo.visualCity, demo.fabric)) {
-      const distance = Math.hypot(camera.position[0] - demo.visualCity.hero.cameraTarget.x, camera.position[1], camera.position[2] - demo.visualCity.hero.cameraTarget.z);
-      expect(Math.abs(distance - lod0MaxDistance), camera.id).toBeGreaterThan(hysteresis);
-      expect(Math.abs(distance - lod1MaxDistance), camera.id).toBeGreaterThan(hysteresis);
-    }
+  it("39. selects LOD independently by spatial chunk and keeps Ring 1 at LOD1 or better", async () => {
+    const source = await readFile(kitSourceUrl, "utf8");
+    expect(source).toContain("chicago-kit-v2-spatial-chunk");
+    expect(source).toContain("camera.position.x - chunk.centerX");
+    expect(source).toContain('chunk.minimumLod = "lod1"');
+    expect(source).not.toContain("camera.position.x - target.x");
   });
 
   it("40. forces selected geometry to LOD0 while removing it from regular tier batches", async () => {
     const source = await readFile(kitSourceUrl, "utf8");
     expect(source).toContain('name="chicago-kit-v2-selected-lod0"');
-    expect(source).toContain("box.semanticBuildingId !== selectedSemanticBuildingId");
+    expect(source).toContain("box.semanticBuildingId === selectedSemanticBuildingId) continue");
     expect(source).toContain("box.semanticBuildingId === selectedSemanticBuildingId");
   });
 
@@ -449,9 +447,21 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
 
   it("50. uses shared deterministic material detail instead of per-building texture allocation", async () => {
     const source = await readFile(kitSourceUrl, "utf8");
-    expect(source).toContain("SHARED_SURFACE_TEXTURES");
-    expect(source.match(/new THREE\.DataTexture/g)).toHaveLength(1);
-    expect(source).toContain("SHARED_SURFACE_TEXTURES.get(materialKey)");
+    expect(source).toContain("SHARED_SURFACE_MAPS");
+    expect(source.match(/new THREE\.DataTexture/g)).toHaveLength(2);
+    expect(source).toContain("vChicagoWorldPosition");
+    expect(source).toContain("height.colorSpace = THREE.NoColorSpace");
     expect(source).not.toMatch(/Math\.random|Date\.now|new Date/);
+  });
+
+  it("51. uses shared non-box module geometries for facade, corner, cornice, crown, and awning roles", async () => {
+    const source = await readFile(moduleGeometrySourceUrl, "utf8");
+    for (const primitive of [
+      "single-recess", "miesian-grid", "unitized-panel", "bronze-fin-panel",
+      "chamfer-wrap", "cornice-cap", "stepped-crown", "context-facade-grid", "awning-wedge",
+    ]) expect(source).toContain(`case "${primitive}"`);
+    expect(source).toContain("mergeGeometries");
+    expect(source).toContain("CylinderGeometry");
+    expect(source).toContain("triangularAwning");
   });
 });

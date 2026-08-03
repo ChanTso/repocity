@@ -2,6 +2,7 @@ import definitionJson from "./chicago-kit-v2-definition.json";
 import type { UrbanFacadeFamily } from "./urban-fabric";
 
 export interface ChicagoRhythmRecipe {
+  primitive: "single-recess" | "paired-oriel" | "deep-reveal";
   grouping: number;
   windowWidth: number;
   windowHeight: number;
@@ -12,6 +13,7 @@ export interface ChicagoRhythmRecipe {
 }
 
 export interface ChicagoBaseRecipe {
+  primitive: "arcade-opening" | "recessed-lobby";
   heightScale: number;
   openingWidth: number;
   pierCadence: number;
@@ -21,6 +23,7 @@ export interface ChicagoBaseRecipe {
 }
 
 export interface ChicagoCornerRecipe {
+  primitive: "expressed-pier" | "chamfer-wrap";
   width: number;
   depth: number;
   projection: number;
@@ -30,6 +33,7 @@ export interface ChicagoCornerRecipe {
 }
 
 export interface ChicagoRoofRecipe {
+  primitive: "cornice-cap" | "screen-house" | "stepped-crown";
   style: "cap" | "house" | "crown";
   heightScale: number;
   widthScale: number;

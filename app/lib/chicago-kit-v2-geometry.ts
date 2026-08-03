@@ -56,6 +56,24 @@ export type ChicagoModuleKind =
   | "context-ground"
   | "context-road";
 
+export type ChicagoModulePrimitive =
+  | "box"
+  | "single-recess"
+  | "paired-oriel"
+  | "deep-reveal"
+  | "arcade-opening"
+  | "recessed-lobby"
+  | "miesian-grid"
+  | "unitized-panel"
+  | "bronze-fin-panel"
+  | "expressed-pier"
+  | "chamfer-wrap"
+  | "cornice-cap"
+  | "screen-house"
+  | "stepped-crown"
+  | "context-facade-grid"
+  | "awning-wedge";
+
 export type ChicagoLocalSide = "front" | "back" | "left" | "right";
 export type ChicagoExposure = "primary-street" | "secondary-street" | "exposed-end" | "party-wall" | "rear-service";
 
@@ -70,6 +88,7 @@ export interface ChicagoGeometryBox {
   rotationY: number;
   material: ChicagoRenderMaterialKey;
   module: ChicagoModuleKind;
+  primitive?: ChicagoModulePrimitive;
   lod: ChicagoLod;
   semantic: boolean;
   exposure?: ChicagoExposure;
@@ -140,6 +159,7 @@ function coreBox(
 ): ChicagoGeometryBox {
   return {
     ...input,
+    primitive: input.primitive ?? "box",
     lod,
     semantic: true,
     envelopeId: signature.envelopeId,
@@ -147,6 +167,13 @@ function coreBox(
     primaryEntityId: signature.primaryEntityId,
     componentId: signature.componentId,
   };
+}
+
+function windowPrimitive(signature: BuildingVisualSignature, fallback: ChicagoModulePrimitive): ChicagoModulePrimitive {
+  if (signature.glassSystem === "miesian-expressed-grid") return "miesian-grid";
+  if (signature.glassSystem === "unitized-vision-spandrel") return "unitized-panel";
+  if (signature.glassSystem === "bronze-vertical-fins") return "bronze-fin-panel";
+  return fallback;
 }
 
 function facadeBox(
@@ -281,7 +308,7 @@ function pushBaseVariant(boxes: ChicagoGeometryBox[], envelope: UrbanArchitectur
   const bay = span / openings;
   for (let index = 0; index < openings; index += 1) {
     const offset = -span / 2 + bay * (index + 0.5);
-    boxes.push(facadeBox(signature, envelope, lod, side, offset, BASE_Y + baseHeight * 0.48, bay * recipe.openingWidth, baseHeight * 0.62, recipe.recess, signature.materials.glass ?? "clear-storefront-glass", "ground-floor", `${signature.envelopeId}:${lod}:base-opening:${index}`, "primary-street"));
+    boxes.push({ ...facadeBox(signature, envelope, lod, side, offset, BASE_Y + baseHeight * 0.48, bay * recipe.openingWidth, baseHeight * 0.62, recipe.recess, signature.materials.glass ?? "clear-storefront-glass", "ground-floor", `${signature.envelopeId}:${lod}:base-opening:${index}`, "primary-street"), primitive: recipe.primitive });
     if (lod === "lod0" && index % recipe.pierCadence === 0) boxes.push(facadeBox(signature, envelope, lod, side, offset - bay * 0.43, BASE_Y + baseHeight * 0.5, Math.max(0.08, bay * 0.08), baseHeight * 0.9, recipe.recess + 0.04, signature.materials.frame, "ground-floor", `${signature.envelopeId}:${lod}:base-pier:${index}`, "primary-street"));
   }
   boxes.push(facadeBox(signature, envelope, lod, side, 0, BASE_Y + recipe.plinthHeight / 2, span * 0.94, recipe.plinthHeight, recipe.recess + 0.02, signature.materials.base, "ground-floor", `${signature.envelopeId}:${lod}:plinth`, "primary-street"));
@@ -322,7 +349,12 @@ function pushFacade(boxes: ChicagoGeometryBox[], envelope: UrbanArchitecturalEnv
       const y = BASE_Y + baseHeight + floorHeight * (floor + 0.5);
       for (let bay = 0; bay < groups; bay += 1) {
         const offset = -span / 2 + bayWidth * (bay + 0.5) + (floor % 2 === 0 ? recipe.offset : -recipe.offset);
-        boxes.push(facadeBox(signature, envelope, lod, side, offset, y, bayWidth * (lod === "lod0" ? recipe.windowWidth : 0.76), floorHeight * (lod === "lod0" ? recipe.windowHeight : 0.46), recipe.reveal, signature.materials.glass ?? "smoked-office-glass", lod === "lod0" ? "window" : "middle", `${signature.envelopeId}:${lod}:${side}:window:${floor}:${bay}`, faceExposure));
+        const windowBox = facadeBox(signature, envelope, lod, side, offset, y, bayWidth * (lod === "lod0" ? recipe.windowWidth : 0.76), floorHeight * (lod === "lod0" ? recipe.windowHeight : 0.46), recipe.reveal, signature.materials.glass ?? "smoked-office-glass", lod === "lod0" ? "window" : "middle", `${signature.envelopeId}:${lod}:${side}:window:${floor}:${bay}`, faceExposure);
+        boxes.push({ ...windowBox, primitive: windowPrimitive(signature, recipe.primitive) });
+        if (lod === "lod0" && (floor + bay + Number.parseInt(stableDefinitionHash(signature.envelopeId).slice(-2), 16)) % 3 !== 0) {
+          const interior = facadeBox(signature, envelope, lod, side, offset, y, windowBox.width * 0.9, windowBox.height * 0.86, -0.08, "warm-interior", "window", `${signature.envelopeId}:${lod}:${side}:interior:${floor}:${bay}`, faceExposure);
+          boxes.push({ ...interior, depth: 0.035, primitive: "box" });
+        }
       }
       if (detailed) boxes.push(facadeBox(signature, envelope, lod, side, 0, BASE_Y + baseHeight + floorHeight * (floor + 0.05), span * 0.97, recipe.band, recipe.reveal + 0.025, glass ? signature.materials.frame : signature.materials.base, lod === "lod0" ? "spandrel" : "middle", `${signature.envelopeId}:${lod}:${side}:band:${floor}`, faceExposure));
     }
@@ -345,7 +377,7 @@ function pushCorner(boxes: ChicagoGeometryBox[], envelope: UrbanArchitecturalEnv
   const zSide = vertical === "front" ? 1 : -1;
   const point = localPoint(envelope, xSide * (envelope.width / 2 + recipe.projection), zSide * (envelope.depth / 2 + recipe.projection));
   const height = envelope.height - baseHeight * 0.28;
-  boxes.push(coreBox(signature, lod, { id: `${signature.envelopeId}:${lod}:street-corner`, x: point.x, y: round(BASE_Y + baseHeight * 0.28 + height / 2), z: point.z, width: recipe.width, height: round(height), depth: recipe.depth, rotationY: round(envelope.rotation + recipe.rotation * xSide * zSide), material: recipe.wrapGlass > 0.4 && signature.materials.glass ? signature.materials.glass : signature.materials.frame, module: "corner", exposure: "primary-street" }));
+  boxes.push(coreBox(signature, lod, { id: `${signature.envelopeId}:${lod}:street-corner`, x: point.x, y: round(BASE_Y + baseHeight * 0.28 + height / 2), z: point.z, width: recipe.width, height: round(height), depth: recipe.depth, rotationY: round(envelope.rotation + recipe.rotation * xSide * zSide), material: recipe.wrapGlass > 0.4 && signature.materials.glass ? signature.materials.glass : signature.materials.frame, module: "corner", primitive: recipe.primitive, exposure: "primary-street" }));
   if (lod === "lod0") {
     for (let index = 0; index < recipe.fins; index += 1) {
       const offset = (index - (recipe.fins - 1) / 2) * 0.12;
@@ -358,11 +390,11 @@ function pushTop(boxes: ChicagoGeometryBox[], envelope: UrbanArchitecturalEnvelo
   const recipe = chicagoRoofRecipe(signature.family, signature.roofVariant);
   const complexity = lod === "lod2" ? 1 : lod === "lod1" ? Math.min(2, recipe.tiers) : recipe.tiers;
   const totalHeight = Math.max(0.38, Math.min(2.8, envelope.height * recipe.heightScale));
-  if (lod !== "lod2" || recipe.style === "crown") boxes.push(coreBox(signature, lod, { id: `${signature.envelopeId}:${lod}:cornice`, x: envelope.x, y: round(BASE_Y + envelope.height + 0.09), z: envelope.z, width: round(envelope.width * (1.015 + recipe.tiers * 0.008)), height: 0.18, depth: round(envelope.depth * (1.015 + recipe.tiers * 0.008)), rotationY: envelope.rotation, material: signature.materials.base, module: "cornice" }));
+  if (lod !== "lod2" || recipe.style === "crown") boxes.push(coreBox(signature, lod, { id: `${signature.envelopeId}:${lod}:cornice`, x: envelope.x, y: round(BASE_Y + envelope.height + 0.09), z: envelope.z, width: round(envelope.width * (1.015 + recipe.tiers * 0.008)), height: 0.18, depth: round(envelope.depth * (1.015 + recipe.tiers * 0.008)), rotationY: envelope.rotation, material: signature.materials.base, module: "cornice", primitive: "cornice-cap" }));
   for (let tier = 0; tier < complexity; tier += 1) {
     const scale = 1 - tier * 0.18;
     const point = localPoint(envelope, recipe.offset * envelope.width * (tier + 1), 0);
-    boxes.push(coreBox(signature, lod, { id: `${signature.envelopeId}:${lod}:roof:${tier}`, x: point.x, y: round(BASE_Y + envelope.height + totalHeight / complexity * (tier + 0.5)), z: point.z, width: round(envelope.width * recipe.widthScale * scale), height: round(totalHeight / complexity), depth: round(envelope.depth * recipe.depthScale * scale), rotationY: envelope.rotation, material: recipe.style === "crown" && signature.materials.glass ? signature.materials.glass : signature.materials.roof, module: recipe.style === "crown" ? "crown" : recipe.style === "house" ? "roof-house" : "top" }));
+    boxes.push(coreBox(signature, lod, { id: `${signature.envelopeId}:${lod}:roof:${tier}`, x: point.x, y: round(BASE_Y + envelope.height + totalHeight / complexity * (tier + 0.5)), z: point.z, width: round(envelope.width * recipe.widthScale * scale), height: round(totalHeight / complexity), depth: round(envelope.depth * recipe.depthScale * scale), rotationY: envelope.rotation, material: recipe.style === "crown" && signature.materials.glass ? signature.materials.glass : signature.materials.roof, module: recipe.style === "crown" ? "crown" : recipe.style === "house" ? "roof-house" : "top", primitive: recipe.primitive }));
   }
   if (lod === "lod0") for (let index = 0; index < recipe.fins; index += 1) {
     const point = localPoint(envelope, (index - (recipe.fins - 1) / 2) * envelope.width * 0.12, 0);
@@ -392,13 +424,13 @@ function pushStorefront(boxes: ChicagoGeometryBox[], storefront: UrbanStorefront
   const glassHeight = loading ? 1.55 : lobby ? 1.72 : 1.28;
   const tangentX = Math.cos(storefront.rotation);
   const tangentZ = -Math.sin(storefront.rotation);
-  const add = (suffix: string, width: number, height: number, depth: number, material: ChicagoRenderMaterialKey, module: ChicagoModuleKind, x = storefront.x, z = storefront.z, y = BASE_Y + height / 2 + 0.06) => boxes.push(coreBox(signature, "lod0", { id: `${storefront.id}:${suffix}`, x: round(x), y: round(y), z: round(z), width: round(width), height: round(height), depth, rotationY: storefront.rotation, material, module, exposure: "primary-street", storefrontId: storefront.id }));
+  const add = (suffix: string, width: number, height: number, depth: number, material: ChicagoRenderMaterialKey, module: ChicagoModuleKind, x = storefront.x, z = storefront.z, y = BASE_Y + height / 2 + 0.06, primitive: ChicagoModulePrimitive = "box") => boxes.push(coreBox(signature, "lod0", { id: `${storefront.id}:${suffix}`, x: round(x), y: round(y), z: round(z), width: round(width), height: round(height), depth, rotationY: storefront.rotation, material, module, primitive, exposure: "primary-street", storefrontId: storefront.id }));
   add("interior", storefront.width * 0.88, glassHeight, 0.1, loading ? "dark-structural-steel" : "warm-interior", loading ? "entrance" : "storefront");
-  add("glass", storefront.width * 0.83, glassHeight * 0.9, 0.09, loading ? "dark-structural-steel" : "clear-storefront-glass", loading ? "entrance" : "storefront");
+  add("glass", storefront.width * 0.83, glassHeight * 0.9, 0.09, loading ? "dark-structural-steel" : "clear-storefront-glass", loading ? "entrance" : "storefront", storefront.x, storefront.z, BASE_Y + glassHeight * 0.45 + 0.06, "recessed-lobby");
   for (const side of [-1, 1]) add(`frame:${side}`, Math.max(0.055, storefront.width * 0.035), glassHeight, 0.13, signature.materials.frame, "ground-floor", storefront.x + tangentX * side * storefront.width * 0.43, storefront.z + tangentZ * side * storefront.width * 0.43);
   if (!loading) for (const offset of [-0.2, 0.2]) add(`mullion:${offset}`, Math.max(0.045, storefront.width * 0.022), glassHeight, 0.14, signature.materials.frame, "mullion", storefront.x + tangentX * offset * storefront.width, storefront.z + tangentZ * offset * storefront.width);
   add(`sign:${programSignature}`, storefront.width * 0.9, 0.24, 0.16, lobby ? "civic-accent" : signature.materials.wall, "ground-floor", storefront.x, storefront.z, BASE_Y + glassHeight + 0.23);
-  if (cafe || storefront.category === "bookshop" || storefront.category === "neighborhood-grocer") add("awning", storefront.width * 0.86, 0.09, cafe ? 0.48 : 0.34, cafe ? "canvas-awning" : signature.materials.frame, "awning", storefront.x, storefront.z, BASE_Y + glassHeight + 0.04);
+  if (cafe || storefront.category === "bookshop" || storefront.category === "neighborhood-grocer") add("awning", storefront.width * 0.86, 0.09, cafe ? 0.48 : 0.34, cafe ? "canvas-awning" : signature.materials.frame, "awning", storefront.x, storefront.z, BASE_Y + glassHeight + 0.04, "awning-wedge");
 }
 
 function contextBox(signature: ContextVisualSignature, lod: ChicagoLod, input: Omit<ChicagoGeometryBox, "lod" | "semantic" | "contextId">): ChicagoGeometryBox {
@@ -407,19 +439,62 @@ function contextBox(signature: ContextVisualSignature, lod: ChicagoLod, input: O
 
 function pushContextBuilding(boxes: ChicagoGeometryBox[], building: VisualContextBuilding, signature: ContextVisualSignature, lod: ChicagoLod) {
   const baseHeight = Math.min(1.55, building.height * 0.18);
-  const detail = lod === "lod0" ? (signature.ring === 1 ? 2 : signature.ring === 2 ? 1 : 0) : lod === "lod1" ? (signature.ring <= 2 ? 1 : 0) : 0;
-  const inset = signature.massingVariant === "base-shaft-top" ? 0.06 : 0.16;
+  const detail = lod === "lod0" ? (signature.ring === 1 ? 2 : signature.ring === 2 ? 1 : 0) : lod === "lod1" ? (signature.ring === 1 ? 1 : 0) : 0;
+  const inset = signature.massingVariant === "base-shaft-top" ? 0.06 : signature.massingVariant === "setback-shoulder" ? 0.12 : 0.18;
   const shaftWidth = building.width * (1 - inset);
   const shaftDepth = building.depth * (1 - inset);
   const shaftHeight = Math.max(1, building.height - baseHeight);
+  const upperScale = signature.massingVariant === "setback-shoulder" ? 0.72 : 1;
+  const lowerShaftHeight = signature.massingVariant === "setback-shoulder" ? shaftHeight * 0.72 : shaftHeight;
+  const upperShaftHeight = shaftHeight - lowerShaftHeight;
+  const shaftMaterial = signature.materials.wall === "dark-structural-steel"
+    ? "architectural-concrete"
+    : signature.materials.wall;
+  const roofRecipe = chicagoRoofRecipe(signature.family, signature.roofVariant);
   boxes.push(
     contextBox(signature, lod, { id: `${signature.contextId}:${lod}:base`, x: building.x, y: round(BASE_Y + baseHeight / 2), z: building.z, width: building.width, height: round(baseHeight), depth: building.depth, rotationY: 0, material: signature.materials.base, module: "context-base" }),
-    contextBox(signature, lod, { id: `${signature.contextId}:${lod}:middle`, x: building.x, y: round(BASE_Y + baseHeight + shaftHeight / 2), z: building.z, width: round(shaftWidth), height: round(shaftHeight), depth: round(shaftDepth), rotationY: 0, material: signature.materials.glass ?? signature.materials.wall, module: "context-middle" }),
-    contextBox(signature, lod, { id: `${signature.contextId}:${lod}:top`, x: building.x, y: round(BASE_Y + building.height + 0.3), z: building.z, width: round(shaftWidth * 0.68), height: 0.6, depth: round(shaftDepth * 0.64), rotationY: 0, material: signature.materials.roof, module: "context-top" }),
+    contextBox(signature, lod, { id: `${signature.contextId}:${lod}:middle`, x: building.x, y: round(BASE_Y + baseHeight + lowerShaftHeight / 2), z: building.z, width: round(shaftWidth), height: round(lowerShaftHeight), depth: round(shaftDepth), rotationY: 0, material: shaftMaterial, module: "context-middle" }),
+    contextBox(signature, lod, { id: `${signature.contextId}:${lod}:top`, x: building.x, y: round(BASE_Y + building.height + 0.3), z: building.z, width: round(shaftWidth * roofRecipe.widthScale * 0.78), height: 0.6, depth: round(shaftDepth * roofRecipe.depthScale * 0.66), rotationY: 0, material: signature.materials.roof, module: "context-top", primitive: roofRecipe.primitive }),
   );
+  if (upperShaftHeight > 0) boxes.push(contextBox(signature, lod, {
+    id: `${signature.contextId}:${lod}:middle-upper`,
+    x: round(building.x + roofRecipe.offset * 0.35),
+    y: round(BASE_Y + baseHeight + lowerShaftHeight + upperShaftHeight / 2),
+    z: building.z,
+    width: round(shaftWidth * upperScale),
+    height: round(upperShaftHeight),
+    depth: round(shaftDepth * upperScale),
+    rotationY: 0,
+    material: shaftMaterial,
+    module: "context-middle",
+  }));
   if (detail > 0) {
-    const bands = detail === 2 ? Math.max(3, Math.min(8, Math.floor(building.height / 1.4))) : Math.max(2, Math.min(4, Math.floor(building.height / 3.2)));
-    for (let index = 0; index < bands; index += 1) boxes.push(contextBox(signature, lod, { id: `${signature.contextId}:${lod}:band:${index}`, x: building.x, y: round(BASE_Y + baseHeight + shaftHeight / bands * (index + 0.5)), z: round(building.z - shaftDepth / 2 - 0.04), width: round(shaftWidth * 0.74), height: round(Math.min(0.5, shaftHeight / bands * 0.48)), depth: 0.06, rotationY: 0, material: signature.materials.glass ?? "smoked-office-glass", module: "context-window-band" }));
+    const windowMaterial = signature.materials.glass ?? "smoked-office-glass";
+    const groundBays = detail === 2 ? 4 : 3;
+    for (let bay = 0; bay < groundBays; bay += 1) boxes.push(contextBox(signature, lod, {
+      id: `${signature.contextId}:${lod}:ground-opening:${bay}`,
+      x: round(building.x - building.width * 0.38 + building.width * 0.76 * (bay + 0.5) / groundBays),
+      y: round(BASE_Y + baseHeight * 0.48),
+      z: round(building.z - building.depth / 2 - 0.045),
+      width: round(building.width * 0.6 / groundBays),
+      height: round(baseHeight * 0.62),
+      depth: 0.09,
+      rotationY: 0,
+      material: windowMaterial,
+      module: "context-window-band",
+      primitive: "arcade-opening",
+    }));
+    const pushFacadeGrid = (suffix: string, width: number, depth: number, height: number, y: number, xOffset = 0) => {
+      const x = building.x + xOffset;
+      boxes.push(
+        contextBox(signature, lod, { id: `${signature.contextId}:${lod}:${suffix}:front`, x, y, z: round(building.z - depth / 2 - 0.045), width: round(width * 0.9), height: round(height * 0.9), depth: 0.09, rotationY: 0, material: windowMaterial, module: "context-window-band", primitive: "context-facade-grid" }),
+        contextBox(signature, lod, { id: `${signature.contextId}:${lod}:${suffix}:back`, x, y, z: round(building.z + depth / 2 + 0.045), width: round(width * 0.9), height: round(height * 0.9), depth: 0.09, rotationY: Math.PI, material: windowMaterial, module: "context-window-band", primitive: "context-facade-grid" }),
+        contextBox(signature, lod, { id: `${signature.contextId}:${lod}:${suffix}:right`, x: round(x + width / 2 + 0.045), y, z: building.z, width: round(depth * 0.9), height: round(height * 0.9), depth: 0.09, rotationY: Math.PI / 2, material: windowMaterial, module: "context-window-band", primitive: "context-facade-grid" }),
+        contextBox(signature, lod, { id: `${signature.contextId}:${lod}:${suffix}:left`, x: round(x - width / 2 - 0.045), y, z: building.z, width: round(depth * 0.9), height: round(height * 0.9), depth: 0.09, rotationY: -Math.PI / 2, material: windowMaterial, module: "context-window-band", primitive: "context-facade-grid" }),
+      );
+    };
+    pushFacadeGrid("facade-lower", shaftWidth, shaftDepth, lowerShaftHeight, BASE_Y + baseHeight + lowerShaftHeight / 2);
+    if (upperShaftHeight > 0) pushFacadeGrid("facade-upper", shaftWidth * upperScale, shaftDepth * upperScale, upperShaftHeight, BASE_Y + baseHeight + lowerShaftHeight + upperShaftHeight / 2, roofRecipe.offset * 0.35);
   }
 }
 
@@ -433,7 +508,7 @@ export function chicagoBuildingGeometryFingerprint(boxes: readonly ChicagoGeomet
   const normalized = boxes.map((box) => {
     const dx = box.x - envelope.x;
     const dz = box.z - envelope.z;
-    return [box.module, round(dx * cosine - dz * sine), round(box.y - BASE_Y), round(dx * sine + dz * cosine), round(box.width), round(box.height), round(box.depth), round(box.rotationY - envelope.rotation), box.material].join(":");
+    return [box.module, box.primitive ?? "box", round(dx * cosine - dz * sine), round(box.y - BASE_Y), round(dx * sine + dz * cosine), round(box.width), round(box.height), round(box.depth), round(box.rotationY - envelope.rotation), box.material].join(":");
   }).sort();
   return stableDefinitionHash(normalized);
 }
