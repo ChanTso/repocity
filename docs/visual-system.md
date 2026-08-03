@@ -2,7 +2,7 @@
 
 RepoCity's current renderer combines semantic geometry with non-semantic urban context.
 
-## Full-city Chicago Kit v2 development candidate
+## Full-city Chicago Kit v2
 
 Chicago Kit v2 extends the asset strategy from five complete hero roots to nine deterministic modular architectural families across all 72 semantic-core envelopes. The runtime fits discrete bays and floors, then instances module boxes in shared material batches. Ring 1 receives family facade structure; Rings 2–3 receive family silhouettes and roof treatments rather than blank slabs.
 

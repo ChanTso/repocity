@@ -1,6 +1,6 @@
 # Living Streets v0.2
 
-Living Streets is an unreleased activity-layer candidate. It makes the existing city visibly occupied without turning decorative traffic into repository evidence or runtime telemetry.
+Living Streets shipped in v0.2.0. It makes the city visibly occupied without turning decorative traffic into repository evidence or runtime telemetry.
 
 ## Baseline and implementation
 

@@ -4,6 +4,8 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-03
+
 ### Added
 
 - Dedicated semantic Map mode with component ownership, building envelopes, stable addresses, deterministic labels, and repository-to-symbol breadcrumbs.
@@ -20,7 +22,13 @@ All notable public releases are documented here. RepoCity uses semantic versioni
 - Ambient playback remains independent from Flow evidence pause; Map and Replay keep the same cohort visually subordinate.
 - Full-city architecture is selected from urban zone and spatial conditions rather than component identity or display color; selection continues to resolve existing semantic owners.
 
-This section describes an unmerged development candidate and does not announce a v0.2 release or schedule.
+### Showcase boundaries
+
+- Curated experimental release with local repository analysis and no hosted GitHub URL-ingestion service.
+- JavaScript and TypeScript support remains bounded; the full-city demo is a deterministic product dataset.
+- Rendering is intentionally Chicago-inspired and stylized, not a photoreal digital twin.
+- Ambient people, vehicles, and boats remain deterministic non-semantic context rather than telemetry.
+- No future release cadence is promised.
 
 ## [0.1.0-alpha.2] — 2026-08-02
 

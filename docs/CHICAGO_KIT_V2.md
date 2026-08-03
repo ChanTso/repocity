@@ -2,7 +2,7 @@
 
 Chicago Kit v2 is RepoCity's deterministic, full-city architectural language for the v0.2 development line. It replaces the semantic core's generic stretched envelopes and the context rings' blank slabs with fitted modular facades while leaving repository facts, ownership, roads, blocks, addresses, Living Streets, Flow, and Replay unchanged.
 
-This document is an art bible and implementation contract. It does not announce a v0.2 release.
+This document is the art bible and implementation contract for the Chicago Kit v2 system released in v0.2.0.
 
 ## Baseline audit
 
@@ -59,7 +59,7 @@ Nine families share a named module grammar: two base/ground-floor variants, thre
 
 `app/lib/chicago-kit-v2-definition.json` is the single canonical module source. Both the runtime compiler and `scripts/generate-city-kit-v2.mjs` consume it. The generator emits nine original GLB reference catalogs to `public/assets/city-kit-v2/`; their exact root maps and recipe fingerprints are checked against runtime definitions in CI. The GLBs are explicitly tooling/reference artifacts. Runtime recipes compile into material-and-primitive instanced batches using shared box, reveal, oriel, curtain-panel, corner, cornice, crown, awning, and context-facade geometries instead of one scene graph per facade part.
 
-The corrected v2 catalog payload is 1,970,652 bytes. It is additive during Draft review: City Kit v1 is deliberately not removed until v2 is accepted.
+The corrected v2 catalog payload is 1,970,652 bytes. City Kit v1 remains as the original reusable hero-slice catalog and compatibility reference; v2 supplies the full-city architectural system.
 
 One world unit remains approximately three metres. Floor count, bay count, residual pier width, podium height, and setbacks are derived discretely. A completed facade is never blindly stretched to an envelope. Maximum measured dimension deviation in the standard demo is 31.9%, below the documented 34% fitting tolerance.
 
@@ -116,7 +116,7 @@ Family use is intentionally uneven: ordinary Chicago masonry and narrow commerci
 
 ## Visual checkpoint and limitations
 
-The failed Owner package remains in `screenshots/chicago-kit-v2/review-fixes/`. The replacement package awaiting re-check is in `screenshots/chicago-kit-v2/owner-recheck/`. It contains six HUD-hidden 1920×1080 acceptance captures, a 3×2 `contact-sheet.png`, and separate Map/Flow regression frames. These are real renderer pixels, not generated concept art.
+The failed Owner package remains in `screenshots/chicago-kit-v2/review-fixes/` as history. The accepted corrective baseline is in `screenshots/chicago-kit-v2/owner-recheck/`; final release media is in `docs/media/`. Every image is made from real renderer pixels, not generated concept art.
 
 This remains a stylized public-alpha renderer. Brick, stone, concrete, and metal now use separate small shared deterministic sRGB albedo and linear height maps sampled in world space, with one cached pair per material rather than per building. Translucent office glass reveals shallow warm interior cards; small facade elements simplify at overview distance; and context rings intentionally have less street-level detail than the core. The work aims for coherent Chicago-inspired identity, not photo-realism or a landmark replica.
 

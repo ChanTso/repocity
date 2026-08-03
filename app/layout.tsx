@@ -19,11 +19,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase,
     title: {
-      default: "RepoCity — Semantic City Prototype",
+      default: "RepoCity — Semantic City Showcase",
       template: "%s · RepoCity",
     },
     description:
-      "Turn a codebase into an explorable semantic city with evidence-backed journeys.",
+      "Explore codebases as living semantic cities with evidence-backed journeys.",
     applicationName: "RepoCity",
     keywords: [
       "RepoCity",
@@ -34,8 +34,8 @@ export async function generateMetadata(): Promise<Metadata> {
       "代码可视化",
     ],
     openGraph: {
-      title: "RepoCity — Public Semantic City Prototype",
-      description: "Explore repository structure and evidence-backed journeys as an interactive 3D city.",
+      title: "RepoCity — Semantic City Showcase",
+      description: "Explore repository structure and evidence-backed journeys as an interactive living city.",
       type: "website",
       locale: "zh_CN",
       images: [
@@ -49,8 +49,8 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: "RepoCity — Public Semantic City Prototype",
-      description: "Turn a codebase into an explorable semantic city.",
+      title: "RepoCity — Semantic City Showcase",
+      description: "Explore codebases as living semantic cities.",
       images: [socialImage],
     },
   };

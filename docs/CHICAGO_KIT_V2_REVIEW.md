@@ -1,4 +1,6 @@
-# Chicago Kit v2 owner visual review
+# Chicago Kit v2 owner visual review (historical)
+
+> This records the rejected intermediate visual baseline. The corrective baseline was later accepted for the v0.2.0 showcase; see [Chicago Kit v2](CHICAGO_KIT_V2.md) and the [final media manifest](media/README.md).
 
 Status: **OWNER VISUAL REVIEW FAILED**.
 

@@ -30,9 +30,12 @@ test("server-renders a lightweight RepoCity loading shell", async () => {
   const html = await response.text();
   assert.match(
     html,
-    /<title>RepoCity — Semantic City Prototype<\/title>/i,
+    /<title>RepoCity — Semantic City Showcase<\/title>/i,
   );
-  assert.match(html, /Turn a codebase into an explorable semantic city/i);
+  assert.match(
+    html,
+    /Explore codebases as living semantic cities with evidence-backed journeys/i,
+  );
   assert.match(html, /RepoCity/);
   assert.match(html, /零号城/);
   assert.match(html, /正在生成零号城/);
