@@ -406,16 +406,19 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
   it("47. keeps facade projections outside neighboring envelope interiors", () => {
     const envelopes = demo.fabric.architecturalEnvelopes;
     const projections = demo.geometry.boxes.filter((box) => box.semantic && box.exposure && !["base", "middle", "top", "roof-house", "crown", "cornice"].includes(box.module));
+    const penetrations: string[] = [];
     for (const box of projections) for (const candidate of envelopes) {
       if (candidate.id === box.envelopeId) continue;
       const dx = box.x - candidate.x;
       const dz = box.z - candidate.z;
+      if (Math.hypot(dx, dz) >= (Math.hypot(candidate.width, candidate.depth) + Math.hypot(box.width, box.depth)) / 2) continue;
       const cosine = Math.cos(candidate.rotation);
       const sine = Math.sin(candidate.rotation);
       const localX = dx * cosine - dz * sine;
       const localZ = dx * sine + dz * cosine;
-      expect(Math.abs(localX) < candidate.width / 2 - 0.08 && Math.abs(localZ) < candidate.depth / 2 - 0.08, `${box.id} overlaps ${candidate.id}`).toBe(false);
+      if (Math.abs(localX) < candidate.width / 2 - 0.08 && Math.abs(localZ) < candidate.depth / 2 - 0.08) penetrations.push(`${box.id} overlaps ${candidate.id}`);
     }
+    expect(penetrations).toEqual([]);
   });
 
   it("48. compiles all three tiers within the fixed-fixture performance budget", () => {
