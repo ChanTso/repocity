@@ -55,11 +55,11 @@ Zones must differ by geometry, facade rhythm, base, corner, and silhouette—not
 
 ## Modular architecture
 
-Nine families share a named module grammar: base/ground floor, three repeatable middle rhythms, two corners, an end wall, a setback shoulder, three roof/top treatments, a roof house, and optional crown. Every ordinary family also has two deterministic material/age states.
+Nine families share a named module grammar: two base/ground-floor variants, three repeatable middle rhythms, two real street-corner treatments, exposure-aware end/party/rear walls, and three roof/top treatments. Every ordinary family also has two deterministic material/age states. Variant names are accepted only when they resolve to a canonical numeric recipe, and every recipe produces a distinct local-space geometry fingerprint.
 
-The generator at `scripts/generate-city-kit-v2.mjs` emits nine original GLB catalogs to `public/assets/city-kit-v2/`. The runtime compiles the same module grammar into instanced unit boxes grouped by 18 PBR material batches. GLBs are the inspectable source catalog; the compiled representation avoids one scene graph per facade part.
+`app/lib/chicago-kit-v2-definition.json` is the single canonical module source. Both the runtime compiler and `scripts/generate-city-kit-v2.mjs` consume it. The generator emits nine original GLB reference catalogs to `public/assets/city-kit-v2/`; their exact root maps and recipe fingerprints are checked against runtime definitions in CI. The GLBs are explicitly tooling/reference artifacts, while the runtime compiles the same recipes into instanced boxes to avoid one scene graph per facade part.
 
-The v2 catalog payload is 1,558,326 bytes. It is additive during Draft review: City Kit v1 is deliberately not removed until v2 is accepted.
+The corrected v2 catalog payload is 1,970,652 bytes. It is additive during Draft review: City Kit v1 is deliberately not removed until v2 is accepted.
 
 One world unit remains approximately three metres. Floor count, bay count, residual pier width, podium height, and setbacks are derived discretely. A completed facade is never blindly stretched to an envelope. Maximum measured dimension deviation in the standard demo is 31.9%, below the documented 34% fitting tolerance.
 
@@ -75,13 +75,16 @@ Three curtain-wall geometries are structural, not palette aliases:
 
 An adjacency pass works along actual primary-street groups. It prevents an exact neighboring signature, immediate rhythm repetition, and more than two consecutive buildings in one family. The standard demo currently measures 18.75% same-family adjacent pairs, below the 35% ceiling.
 
-## Context LOD and street level
+## Real LOD, exposure, and street level
 
-- Core envelopes use LOD0 facade, corner, base, storefront, entrance, roof, and crown modules.
-- Ring 1 uses family-based LOD1 bodies, window bands, vertical piers, bases, and tops.
-- Rings 2–3 use deterministic family silhouettes, material sets, and roof treatments.
+- LOD0 uses full facade rhythms, base openings, storefronts, entrances, mullions, spandrels, the selected corner pair, and full roof topology.
+- LOD1 uses simplified city-scale facade bands, bases, major corners, and reduced roof topology; it contains no storefront, detailed window, mullion, awning, or spandrel modules.
+- LOD2 uses distant massing and a family-specific top silhouette only.
+- Precompiled tiers switch by stable `52 / 145` world-unit thresholds with a seven-unit hysteresis band; geometry is never planned or rebuilt in the frame loop.
+- The selected semantic building is removed from regular tier batches and rendered once at LOD0, preserving accurate inspection without duplicate instances.
+- Primary and secondary street walls receive the full facade. Shared party walls receive no windows, rear/service walls remain restrained, exposed ends use sparse end-wall treatment, and corner modules are emitted only at the real primary/secondary street intersection.
 - All 326 context buildings remain non-semantic and unselectable.
-- Every planned storefront receives a visual shop, lobby, gallery, service, or entrance treatment. This raises visual ground-floor program coverage to 82% citywide and 78% in Fulton without creating software facts.
+- Every planned storefront receives a visual shop, lobby, gallery, service, or entrance treatment. Measured from the actual compiled opening widths, active frontage is 88% citywide and 87.9993% in Fulton without creating software facts.
 
 Living Streets continues to use the pre-existing validated public-frontage and lane network. Decorative entrances do not alter route ownership or introduce diagonal fallbacks.
 
@@ -93,25 +96,29 @@ Living Streets continues to use the pre-existing validated public-frontage and l
 | Context buildings | 326 |
 | Facade families visible | 9 |
 | Curtain-wall geometries | 3 |
-| Roof/top variants | 22 |
-| Corner variants | 16 |
+| Distinct compiled building fingerprints | 72 |
+| Distinct compiled rhythm fingerprints | 72 |
+| Distinct compiled base fingerprints | 72 |
+| Distinct compiled roof fingerprints | 65 |
+| Distinct compiled corner fingerprints | 72 |
 | Ground-floor program families | 8 |
 | Exact adjacent duplicates | 0 |
 | Immediate rhythm repeats | 0 |
 | Maximum same-family run | 2 |
 | Landmarks | 1.389% |
 | Blank context fallbacks | 0 |
-| Compiled module boxes | 23,641 |
-| Instanced material batches | 18 |
-| Planner p95, 100 deterministic seeds | 1.137 ms |
+| Compiled LOD0 / LOD1 / LOD2 boxes | 11,448 / 4,096 / 1,376 |
+| Instanced material batches per active tier | up to 18 |
+| Planner p95, 100 deterministic seeds | 1.8796 ms |
+| Three-tier compiler p95, 20 fixed-fixture runs | 83.646 ms |
 
 Family use is intentionally uneven: ordinary Chicago masonry and narrow commercial fabric dominate, while bronze modernism and landmarks stay selective.
 
 ## Visual checkpoint and limitations
 
-Representative UI-hidden captures for Fulton, Loop, Miesian, and Civic architecture are in `screenshots/chicago-kit-v2/checkpoint/`. They passed the implementation checkpoint because each shows a different base/middle/top and facade rhythm, corners are articulated, windows remain proportioned, and glass is geometrically distinct from masonry.
+The final corrective-pass review package is in `screenshots/chicago-kit-v2/review-fixes/`. It contains ten UI-hidden 1920×1080 captures plus `contact-sheet.png`, covering the overview, Fulton, Loop, Miesian, riverfront, civic, context, dusk, Map selection, and Flow with Living Streets. These are real renderer pixels, not generated concept art.
 
-This remains a stylized public-alpha renderer. Materials are procedural PBR colors rather than photogrammetry; interiors are shallow warm cards; small facade elements simplify at overview distance; and context rings intentionally have less street-level detail than the core. The work aims for coherent Chicago-inspired identity, not photo-realism or a landmark replica.
+This remains a stylized public-alpha renderer. Brick, stone, concrete, and metal now use small shared deterministic procedural surface maps and bump response, with one cached texture per material rather than per building. They improve close-range material separation without adding a licensed-image surface. Interiors remain shallow warm cards; small facade elements simplify at overview distance; and context rings intentionally have less street-level detail than the core. The work aims for coherent Chicago-inspired identity, not photo-realism or a landmark replica.
 
 Owner art-direction acceptance is intentionally pending. See [the review record](CHICAGO_KIT_V2_REVIEW.md), [asset manifest](assets/city-kit-v2-manifest.md), and [visual system](visual-system.md).
 
@@ -121,13 +128,13 @@ The following 15-sample measurements use the same Chrome session, 1920×1080 vie
 
 | Mode | Metric | Before | Chicago Kit v2 | Change / target |
 | --- | --- | ---: | ---: | --- |
-| Explore | Median-smoothed frame time | 21.31 ms | 8.31 ms | −61.0%; within +15% ceiling |
-| Explore | Draw calls | 178 | 46 | below preferred 200 |
-| Explore | Triangles | 283,298 | 375,102 | below preferred 650,000 |
-| Explore | Geometries / textures | 169 / 34 | 61 / 6 | shared instancing reduced both |
-| Flow | Median-smoothed frame time | 27.99 ms | 12.27 ms | −56.2%; within +15% ceiling |
-| Flow | Draw calls | 256 | 152 | below preferred 230 |
-| Flow | Triangles | 289,156 | 379,000 | below preferred 650,000 |
-| Flow | Geometries / textures | 237 / 35 | 156 / 8 | no per-building texture growth |
+| Explore | Median-smoothed frame time | 21.31 ms | 8.34 ms | −60.9%; within +15% ceiling |
+| Explore | Draw calls | 178 | 70 | below preferred 200 |
+| Explore | Triangles | 283,298 | 136,162 | below preferred 650,000 |
+| Explore | Geometries / textures / programs | 169 / 34 / 37 | 115 / 15 / 49 | shared instancing and cached maps |
+| Flow | Median-smoothed frame time | 27.99 ms | 10.56 ms | −62.3%; within +15% ceiling |
+| Flow | Draw calls | 256 | 159 | below preferred 230 |
+| Flow | Triangles | 289,156 | 137,544 | below preferred 650,000 |
+| Flow | Geometries / textures / programs | 237 / 35 / 43 | 194 / 16 / 58 | no per-building texture growth |
 
 The renderer spends additional triangles on facade grids, fitted windows, corners, roof forms, and Ring-1 bands, while instancing reduces draw calls and memory objects substantially. No asset or signature count grows across repeated Explore/Map/Flow/Replay switches.
