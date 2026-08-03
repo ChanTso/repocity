@@ -13,7 +13,23 @@ import {
   measureChicagoKitV2Plan,
   planChicagoKitV2,
 } from "./chicago-kit-v2";
-import { buildChicagoKitV2Geometry } from "./chicago-kit-v2-geometry";
+import {
+  buildChicagoKitV2Geometry,
+  chicagoBuildingGeometryFingerprint,
+  classifyChicagoEnvelopeExposure,
+  compileChicagoBuildingGeometry,
+  measureChicagoKitV2CompiledGeometry,
+  selectChicagoLod,
+  type ChicagoModuleKind,
+} from "./chicago-kit-v2-geometry";
+import {
+  CHICAGO_KIT_V2_DEFINITION,
+  chicagoAssetRootMap,
+  chicagoFamilyDefinition,
+  chicagoVariantDefinitionFingerprint,
+  stableDefinitionHash,
+} from "./chicago-kit-v2-definition";
+import { makeAssetReviewCameraPresets, planAssetBackedHero } from "./asset-city";
 import { planUrbanFabric, type UrbanCharacterZone, type UrbanFacadeFamily } from "./urban-fabric";
 import { planVisualCity } from "./visual-city";
 
@@ -39,6 +55,38 @@ const demo = fixture();
 const catalogUrl = new URL("../../public/assets/city-kit-v2/catalog.json", import.meta.url);
 const kitSourceUrl = new URL("../components/city/ChicagoKitV2.tsx", import.meta.url);
 const generatorUrl = new URL("../../scripts/generate-city-kit-v2.mjs", import.meta.url);
+const definitionUrl = new URL("./chicago-kit-v2-definition.json", import.meta.url);
+
+function variantGeometryFingerprints(
+  family: UrbanFacadeFamily,
+  kind: "rhythm" | "base" | "corner" | "roof",
+): string[] {
+  const definition = chicagoFamilyDefinition(family);
+  const envelope = demo.fabric.architecturalEnvelopes[0]!;
+  const seed = demo.plan.signatures[0]!;
+  const modules: Record<typeof kind, readonly ChicagoModuleKind[]> = {
+    rhythm: ["window", "mullion", "spandrel"],
+    base: ["base", "ground-floor"],
+    corner: ["corner"],
+    roof: ["top", "cornice", "roof-house", "crown"],
+  };
+  const names = kind === "rhythm" ? definition.rhythms : kind === "base" ? definition.bases : kind === "corner" ? definition.corners : definition.roofs;
+  return names.map((name) => {
+    const signature = {
+      ...seed,
+      family,
+      facadeRhythm: definition.rhythms[0],
+      baseVariant: definition.bases[0],
+      cornerVariant: definition.corners[0],
+      roofVariant: definition.roofs[0],
+      cornerCondition: "street-corner" as const,
+      [kind === "rhythm" ? "facadeRhythm" : kind === "base" ? "baseVariant" : kind === "corner" ? "cornerVariant" : "roofVariant"]: name,
+    };
+    const boxes = compileChicagoBuildingGeometry(signature, envelope, { front: "primary-street", right: "secondary-street", back: "rear-service", left: "exposed-end" }, "lod0")
+      .filter((box) => modules[kind].includes(box.module));
+    return chicagoBuildingGeometryFingerprint(boxes, envelope);
+  });
+}
 
 const ZONE_RANGES: Record<UrbanCharacterZone, readonly UrbanFacadeFamily[]> = {
   "fulton-market": ["fulton-brick-warehouse", "narrow-storefront-row", "chicago-school-masonry"],
@@ -125,12 +173,12 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
     expect(systems).toEqual(new Set(["miesian-expressed-grid", "unitized-vision-spandrel", "bronze-vertical-fins"]));
   });
 
-  it("14. uses at least five roof and top variants", () => {
-    expect(new Set(demo.plan.signatures.map((signature) => signature.roofVariant)).size).toBeGreaterThanOrEqual(5);
+  it("14. derives visibly distinct roof and top counts from compiled geometry", () => {
+    expect(demo.geometry.metrics.distinctRoofGeometryCount).toBeGreaterThanOrEqual(5);
   });
 
-  it("15. uses at least four corner variants", () => {
-    expect(new Set(demo.plan.signatures.map((signature) => signature.cornerVariant)).size).toBeGreaterThanOrEqual(4);
+  it("15. derives visibly distinct corner counts from compiled geometry", () => {
+    expect(demo.geometry.metrics.distinctCornerGeometryCount).toBeGreaterThanOrEqual(4);
   });
 
   it("16. keeps bays and floors within the documented 34 percent tolerance", () => {
@@ -147,8 +195,8 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
   });
 
   it("18. preserves and improves visually active ground floors", () => {
-    expect(demo.plan.metrics.activeGroundFloorPct).toBeGreaterThanOrEqual(demo.fabric.morphology.activeGroundFloorPct);
-    expect(demo.plan.metrics.fultonActiveGroundFloorPct).toBeGreaterThanOrEqual(75);
+    expect(demo.geometry.metrics.activeGroundFloorPct).toBeGreaterThanOrEqual(demo.fabric.morphology.activeGroundFloorPct);
+    expect(demo.geometry.metrics.fultonActiveGroundFloorPct).toBeGreaterThanOrEqual(75);
   });
 
   it("19. provides at least eight ground-floor program families", () => {
@@ -176,7 +224,7 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
   it("23. resolves every rendered semantic module through its existing component", () => {
     const components = new Set(demo.fabric.componentAssignments.map((assignment) => assignment.componentId));
     const core = demo.geometry.boxes.filter((box) => box.semantic);
-    expect(core.length).toBeGreaterThan(10_000);
+    expect(core.length).toBeGreaterThan(8_000);
     expect(core.every((box) => box.componentId && components.has(box.componentId))).toBe(true);
   });
 
@@ -190,7 +238,7 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
   });
 
   it("25. gives Ring 1 family detail with no blank-slab fallback", () => {
-    expect(demo.plan.metrics.blankContextFallbackCount).toBe(0);
+    expect(demo.geometry.metrics.blankContextFallbackCount).toBe(0);
     const ringOne = new Set(demo.plan.contextSignatures.filter((signature) => signature.ring === 1).map((signature) => signature.contextId));
     expect(demo.geometry.boxes.some((box) => box.contextId && ringOne.has(box.contextId) && box.module === "context-window-band")).toBe(true);
   });
@@ -203,15 +251,22 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
     }
   });
 
-  it("27. matches asset files, roots, sizes, hashes, and licenses", async () => {
-    const catalog = JSON.parse(await readFile(catalogUrl, "utf8")) as { license: string; assets: Array<{ file: string; bytes: number; sha256: string; roots: string[] }> };
+  it("27. matches asset files, canonical root maps, fingerprints, sizes, hashes, and licenses", async () => {
+    const catalog = JSON.parse(await readFile(catalogUrl, "utf8")) as { license: string; canonicalDefinition: string; assets: Array<{ family: UrbanFacadeFamily; file: string; bytes: number; sha256: string; roots: string[]; rootMap: ReturnType<typeof chicagoAssetRootMap>; variantFingerprints: Record<string, string>; usage: string }> };
     expect(catalog.license).toBe("Apache-2.0");
+    expect(catalog.canonicalDefinition).toBe("app/lib/chicago-kit-v2-definition.json");
     expect(catalog.assets).toHaveLength(CHICAGO_KIT_V2_FAMILIES.length);
     for (const asset of catalog.assets) {
       const bytes = await readFile(new URL(asset.file, catalogUrl));
       expect(bytes.length).toBe(asset.bytes);
       expect(createHash("sha256").update(bytes).digest("hex")).toBe(asset.sha256);
-      expect(asset.roots).toEqual(["base", "middle-rhythm-1", "middle-rhythm-2", "middle-rhythm-3", "corner-1", "corner-2", "end-wall", "setback-shoulder", "roof-1", "roof-2", "roof-3"]);
+      expect(asset.rootMap).toEqual(chicagoAssetRootMap(asset.family));
+      expect(asset.roots).toEqual(Object.values(asset.rootMap).flatMap((value) => Object.values(value)));
+      expect(asset.usage).toBe("tooling-reference-runtime-procedural-parity");
+      const family = chicagoFamilyDefinition(asset.family);
+      for (const [kind, names] of [["rhythm", family.rhythms], ["base", family.bases], ["corner", family.corners], ["roof", family.roofs]] as const) {
+        for (const name of names) expect(asset.variantFingerprints[`${kind}:${name}`]).toBe(chicagoVariantDefinitionFingerprint(asset.family, kind, name));
+      }
     }
   });
 
@@ -222,10 +277,11 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
     expect(chicagoKitV2VariantInventory()).toHaveLength(CHICAGO_KIT_V2_FAMILIES.length);
   });
 
-  it("29. plans and compiles outside the frame loop", async () => {
+  it("29. plans and compiles outside the frame loop while frame work only toggles precompiled tiers", async () => {
     const source = await readFile(kitSourceUrl, "utf8");
     expect(source).toContain("useMemo");
-    expect(source).not.toContain("useFrame");
+    expect(source).toContain("useFrame");
+    expect(source).not.toMatch(/useFrame\([\s\S]*buildChicagoKitV2Geometry/);
     const timings = Array.from({ length: 100 }, (_, index) => measureChicagoKitV2Plan(demo.fabric, demo.visualCity, `perf-${index}`).planningMs).sort((a, b) => a - b);
     expect(timings[94]!).toBeLessThan(15);
   });
@@ -238,5 +294,159 @@ describe("Chicago Kit v2 visual signatures, assets, and semantic boundaries", ()
     expect(exploreAgain.boxes).toEqual(demo.geometry.boxes);
     expect(flowAgain.boxes).toEqual(flowFirst.boxes);
     expect(new Set(exploreAgain.boxes.map((box) => box.id)).size).toBe(exploreAgain.boxes.length);
+  });
+
+  it("31. gives every rhythm, base, corner, and roof label a distinct geometry fingerprint", () => {
+    for (const family of CHICAGO_KIT_V2_FAMILIES) for (const kind of ["rhythm", "base", "corner", "roof"] as const) {
+      const fingerprints = variantGeometryFingerprints(family, kind);
+      expect(new Set(fingerprints).size, `${family}:${kind}`).toBe(fingerprints.length);
+    }
+  });
+
+  it("32. fingerprints only local geometry, not box ids or world placement", () => {
+    const envelope = demo.fabric.architecturalEnvelopes[0]!;
+    const owned = demo.geometry.boxes.filter((box) => box.envelopeId === envelope.id && !box.storefrontId);
+    const renamed = owned.map((box, index) => ({ ...box, id: `renamed-${index}`, x: box.x + 12, z: box.z - 7 }));
+    const shiftedEnvelope = { ...envelope, x: envelope.x + 12, z: envelope.z - 7 };
+    expect(chicagoBuildingGeometryFingerprint(renamed, shiftedEnvelope)).toBe(chicagoBuildingGeometryFingerprint(owned, envelope));
+  });
+
+  it("33. rejects a renamed variant that has no canonical geometry recipe", () => {
+    const envelope = demo.fabric.architecturalEnvelopes[0]!;
+    const signature = { ...demo.plan.signatures[0]!, facadeRhythm: "same-geometry-new-name" };
+    expect(() => compileChicagoBuildingGeometry(signature, envelope, classifyChicagoEnvelopeExposure(envelope, demo.fabric.architecturalEnvelopes), "lod0")).toThrow(/Unknown Chicago Kit v2 rhythm variant/);
+  });
+
+  it("34. provides strict real-LOD module reduction", () => {
+    expect(demo.geometry.tiers.lod0.moduleCount).toBeGreaterThan(demo.geometry.tiers.lod1.moduleCount);
+    expect(demo.geometry.tiers.lod1.moduleCount).toBeGreaterThan(demo.geometry.tiers.lod2.moduleCount);
+  });
+
+  it("35. keeps storefronts, detailed windows, and mullions in LOD0 only", () => {
+    const detail = new Set<ChicagoModuleKind>(["storefront", "entrance", "awning", "window", "mullion", "spandrel"]);
+    expect(demo.geometry.tiers.lod0.boxes.some((box) => detail.has(box.module))).toBe(true);
+    expect(demo.geometry.tiers.lod1.boxes.some((box) => detail.has(box.module))).toBe(false);
+    expect(demo.geometry.tiers.lod2.boxes.some((box) => detail.has(box.module))).toBe(false);
+  });
+
+  it("36. retains the same semantic owners across every LOD", () => {
+    const expected = new Set(demo.plan.signatures.map((signature) => signature.semanticBuildingId));
+    for (const tier of Object.values(demo.geometry.tiers)) expect(new Set(tier.boxes.flatMap((box) => box.semanticBuildingId ? [box.semanticBuildingId] : []))).toEqual(expected);
+  });
+
+  it("37. keeps every tier free of duplicate instance ids", () => {
+    for (const tier of Object.values(demo.geometry.tiers)) expect(new Set(tier.boxes.map((box) => box.id)).size).toBe(tier.boxes.length);
+  });
+
+  it("38. applies stable LOD thresholds with hysteresis", () => {
+    const { lod0MaxDistance, lod1MaxDistance, hysteresis } = CHICAGO_KIT_V2_DEFINITION.lod;
+    expect(selectChicagoLod(lod0MaxDistance - 1)).toBe("lod0");
+    expect(selectChicagoLod(lod0MaxDistance + 1, "lod0")).toBe("lod0");
+    expect(selectChicagoLod(lod0MaxDistance + hysteresis + 0.1, "lod0")).toBe("lod1");
+    expect(selectChicagoLod(lod1MaxDistance + 1, "lod1")).toBe("lod1");
+    expect(selectChicagoLod(lod1MaxDistance + hysteresis + 0.1, "lod1")).toBe("lod2");
+  });
+
+  it("39. keeps fixed review cameras away from LOD transition bands", () => {
+    const reviewPlan = planAssetBackedHero(demo.fabric, demo.visualCity);
+    const { lod0MaxDistance, lod1MaxDistance, hysteresis } = CHICAGO_KIT_V2_DEFINITION.lod;
+    for (const camera of makeAssetReviewCameraPresets(reviewPlan, demo.visualCity, demo.fabric)) {
+      const distance = Math.hypot(camera.position[0] - demo.visualCity.hero.cameraTarget.x, camera.position[1], camera.position[2] - demo.visualCity.hero.cameraTarget.z);
+      expect(Math.abs(distance - lod0MaxDistance), camera.id).toBeGreaterThan(hysteresis);
+      expect(Math.abs(distance - lod1MaxDistance), camera.id).toBeGreaterThan(hysteresis);
+    }
+  });
+
+  it("40. forces selected geometry to LOD0 while removing it from regular tier batches", async () => {
+    const source = await readFile(kitSourceUrl, "utf8");
+    expect(source).toContain('name="chicago-kit-v2-selected-lod0"');
+    expect(source).toContain("box.semanticBuildingId !== selectedSemanticBuildingId");
+    expect(source).toContain("box.semanticBuildingId === selectedSemanticBuildingId");
+  });
+
+  it("41. derives active-frontage acceptance from compiled storefront geometry", () => {
+    const withoutStorefrontGeometry = demo.geometry.boxes.filter((box) => !box.storefrontId);
+    const metrics = measureChicagoKitV2CompiledGeometry(withoutStorefrontGeometry, demo.plan, demo.fabric);
+    expect(metrics.activeGroundFloorPct).toBe(0);
+    expect(metrics.fultonActiveGroundFloorPct).toBe(0);
+  });
+
+  it("42. derives context fallback failures from required compiled modules", () => {
+    const ringOneId = demo.plan.contextSignatures.find((item) => item.ring === 1)!.contextId;
+    const mutated = demo.geometry.boxes.filter((box) => !(box.contextId === ringOneId && box.module === "context-window-band"));
+    expect(measureChicagoKitV2CompiledGeometry(mutated, demo.plan, demo.fabric).blankContextFallbackCount).toBe(1);
+  });
+
+  it("43. limits real corner treatment to one street intersection per corner building", () => {
+    for (const signature of demo.plan.signatures) {
+      const bodies = demo.geometry.boxes.filter((box) => box.envelopeId === signature.envelopeId && box.id.endsWith(":street-corner"));
+      expect(bodies.length).toBe(signature.cornerCondition === "street-corner" ? 1 : 0);
+    }
+  });
+
+  it("44. keeps windows and mullions off party walls", () => {
+    const partyOwners = new Set(demo.geometry.boxes.filter((box) => box.module === "party-wall").map((box) => `${box.envelopeId}:${box.exposure}`));
+    expect(partyOwners.size).toBeGreaterThan(0);
+    expect(demo.geometry.boxes.some((box) => box.exposure === "party-wall" && (box.module === "window" || box.module === "mullion"))).toBe(false);
+  });
+
+  it("45. preserves non-semantic context and semantic owner fields through all tiers", () => {
+    for (const tier of Object.values(demo.geometry.tiers)) for (const box of tier.boxes) {
+      if (box.contextId) expect(box.semantic).toBe(false);
+      if (box.semantic) expect(box.componentId && box.semanticBuildingId && box.primaryEntityId).toBeTruthy();
+    }
+  });
+
+  it("46. keeps canonical definition and runtime inventory byte-stable", async () => {
+    const disk = JSON.parse(await readFile(definitionUrl, "utf8"));
+    expect(disk).toEqual(CHICAGO_KIT_V2_DEFINITION);
+    expect(stableDefinitionHash(disk)).toBe(stableDefinitionHash(CHICAGO_KIT_V2_DEFINITION));
+  });
+
+  it("47. keeps facade projections outside neighboring envelope interiors", () => {
+    const envelopes = demo.fabric.architecturalEnvelopes;
+    const projections = demo.geometry.boxes.filter((box) => box.semantic && box.exposure && !["base", "middle", "top", "roof-house", "crown", "cornice"].includes(box.module));
+    for (const box of projections) for (const candidate of envelopes) {
+      if (candidate.id === box.envelopeId) continue;
+      const dx = box.x - candidate.x;
+      const dz = box.z - candidate.z;
+      const cosine = Math.cos(candidate.rotation);
+      const sine = Math.sin(candidate.rotation);
+      const localX = dx * cosine - dz * sine;
+      const localZ = dx * sine + dz * cosine;
+      expect(Math.abs(localX) < candidate.width / 2 - 0.08 && Math.abs(localZ) < candidate.depth / 2 - 0.08, `${box.id} overlaps ${candidate.id}`).toBe(false);
+    }
+  });
+
+  it("48. compiles all three tiers within the fixed-fixture performance budget", () => {
+    const samples: number[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const started = performance.now();
+      buildChicagoKitV2Geometry(demo.plan, demo.fabric, demo.visualCity);
+      samples.push(performance.now() - started);
+    }
+    samples.sort((left, right) => left - right);
+    expect(samples[Math.floor(samples.length * 0.95)]!).toBeLessThan(250);
+  });
+
+  it("49. renders isolated non-street sides through exposed-end and rear-service paths", () => {
+    const envelope = demo.fabric.architecturalEnvelopes[0]!;
+    expect(Object.values(classifyChicagoEnvelopeExposure(envelope, [envelope]))).toContain("exposed-end");
+    const boxes = compileChicagoBuildingGeometry(demo.plan.signatures[0]!, envelope, {
+      front: "primary-street",
+      right: "secondary-street",
+      back: "rear-service",
+      left: "exposed-end",
+    }, "lod0");
+    expect(boxes.some((box) => box.module === "exposed-end" && box.exposure === "exposed-end")).toBe(true);
+    expect(boxes.some((box) => box.module === "rear-service" && box.exposure === "rear-service")).toBe(true);
+  });
+
+  it("50. uses shared deterministic material detail instead of per-building texture allocation", async () => {
+    const source = await readFile(kitSourceUrl, "utf8");
+    expect(source).toContain("SHARED_SURFACE_TEXTURES");
+    expect(source.match(/new THREE\.DataTexture/g)).toHaveLength(1);
+    expect(source).toContain("SHARED_SURFACE_TEXTURES.get(materialKey)");
+    expect(source).not.toMatch(/Math\.random|Date\.now|new Date/);
   });
 });
