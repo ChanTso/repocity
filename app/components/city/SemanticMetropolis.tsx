@@ -211,6 +211,7 @@ export function SemanticMetropolis({
   showWaterTraffic = true,
   ambientOpacity = 1,
   ambientSpeedScale = 1,
+  selectedEntityId = null,
   playing = true,
   onHoverEntity,
   onSelectEntity,
@@ -348,6 +349,7 @@ export function SemanticMetropolis({
           hiddenSemanticBuildingIds={hiddenSemanticBuildingIds}
           night={palette.night}
           plan={chicagoKit}
+          selectedSemanticBuildingId={selectedEntityId ? urbanFabric.entityAddresses[selectedEntityId]?.buildingId ?? null : null}
           urbanFabric={urbanFabric}
           visualCity={visualCity}
         />

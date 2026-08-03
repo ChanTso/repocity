@@ -1,4 +1,5 @@
 import { stableCityHash } from "./city-visuals";
+import { CHICAGO_KIT_V2_DEFINITION, chicagoFamilyDefinition } from "./chicago-kit-v2-definition";
 import type { UrbanBlock, UrbanCharacterZone, UrbanFacadeFamily, UrbanFabricPlan, UrbanMassingProfile, UrbanStorefrontCategory } from "./urban-fabric";
 import type { VisualCityPlan, VisualContextBuilding } from "./visual-city";
 
@@ -127,17 +128,12 @@ export interface ChicagoKitV2Metrics {
   contextBuildingCount: number;
   facadeFamilyCount: number;
   curtainWallSystemCount: number;
-  roofVariantCount: number;
-  cornerVariantCount: number;
   groundFloorProgramFamilyCount: number;
   exactAdjacentDuplicateCount: number;
   immediateRhythmRepeatCount: number;
   sameFamilyAdjacentPairPct: number;
   maximumSameFamilyRun: number;
-  activeGroundFloorPct: number;
-  fultonActiveGroundFloorPct: number;
   landmarkRatioPct: number;
-  blankContextFallbackCount: number;
 }
 
 export interface ChicagoKitV2Plan {
@@ -158,53 +154,18 @@ export interface MeasuredChicagoKitV2Plan {
   planningMs: number;
 }
 
-const RHYTHMS: Record<UrbanFacadeFamily, readonly string[]> = {
-  "chicago-school-masonry": ["paired-vertical-bays", "tripartite-oriel-bays", "deep-reveal-grid"],
-  "miesian-grid": ["four-foot-steel-grid", "wide-structural-bays", "double-mullion-grid"],
-  "blue-green-curtain-wall": ["unitized-vision-spandrel", "offset-panel-grid", "corner-glass-grid"],
-  "bronze-vertical-modern": ["close-bronze-fins", "wide-bronze-fins", "paired-river-fins"],
-  "fulton-brick-warehouse": ["broad-punched-windows", "paired-loft-bays", "loading-bay-rhythm"],
-  "narrow-storefront-row": ["two-bay-shop-house", "three-bay-commercial", "single-bay-infill"],
-  "art-deco-setback": ["fluted-vertical-bays", "stepped-spandrel-bays", "recessed-pier-bays"],
-  "civic-institutional": ["monumental-bays", "paired-public-windows", "restrained-colonnade"],
-  "riverfront-terrace": ["terrace-unitized-grid", "river-corner-glass", "vertical-slab-bays"],
-};
-
-const BASES: Record<UrbanFacadeFamily, readonly string[]> = {
-  "chicago-school-masonry": ["stone-arcade", "terra-cotta-shopfront"],
-  "miesian-grid": ["transparent-plaza-lobby", "dark-stone-lobby"],
-  "blue-green-curtain-wall": ["clear-corner-lobby", "stone-podium-lobby"],
-  "bronze-vertical-modern": ["bronze-river-lobby", "granite-podium"],
-  "fulton-brick-warehouse": ["adaptive-reuse-shops", "loading-trace-base"],
-  "narrow-storefront-row": ["canvas-awning-shops", "recessed-retail-bays"],
-  "art-deco-setback": ["granite-portal-base", "limestone-arcade"],
-  "civic-institutional": ["monumental-public-entry", "formal-colonnade"],
-  "riverfront-terrace": ["transparent-river-lobby", "terraced-podium"],
-};
-
-const CORNERS: Record<UrbanFacadeFamily, readonly string[]> = {
-  "chicago-school-masonry": ["expressed-corner-bay", "recessed-stone-corner"],
-  "miesian-grid": ["wrapped-glass-corner", "expressed-steel-corner"],
-  "blue-green-curtain-wall": ["clear-glass-corner", "recessed-panel-corner"],
-  "bronze-vertical-modern": ["bronze-fin-corner", "wrapped-river-corner"],
-  "fulton-brick-warehouse": ["heavy-masonry-corner", "recessed-loading-corner"],
-  "narrow-storefront-row": ["chamfered-shop-corner", "expressed-party-wall"],
-  "art-deco-setback": ["fluted-corner", "stepped-chamfer-corner"],
-  "civic-institutional": ["monumental-corner-pier", "restrained-chamfer"],
-  "riverfront-terrace": ["wrapped-terrace-corner", "bronze-river-corner"],
-};
-
-const ROOFS: Record<UrbanFacadeFamily, readonly string[]> = {
-  "chicago-school-masonry": ["heavy-cornice", "parapet-roof-house", "stepped-cornice"],
-  "miesian-grid": ["restrained-mechanical-top", "recessed-screen", "flat-grid-cap"],
-  "blue-green-curtain-wall": ["glass-screen-top", "offset-roof-house", "thin-metal-cap"],
-  "bronze-vertical-modern": ["bronze-fin-crown", "terraced-top", "recessed-mechanical"],
-  "fulton-brick-warehouse": ["warehouse-parapet", "sawtooth-trace", "glass-rooftop-addition"],
-  "narrow-storefront-row": ["party-wall-parapet", "small-cornice", "stepped-row-top"],
-  "art-deco-setback": ["deco-stepped-crown", "fluted-roof-house", "shouldered-cap"],
-  "civic-institutional": ["formal-cornice", "restrained-civic-crown", "setback-roof-house"],
-  "riverfront-terrace": ["terraced-crown", "tapered-screen", "bronze-slab-top"],
-};
+const RHYTHMS = Object.fromEntries(
+  CHICAGO_KIT_V2_FAMILIES.map((family) => [family, chicagoFamilyDefinition(family).rhythms]),
+) as unknown as Record<UrbanFacadeFamily, readonly string[]>;
+const BASES = Object.fromEntries(
+  CHICAGO_KIT_V2_FAMILIES.map((family) => [family, chicagoFamilyDefinition(family).bases]),
+) as unknown as Record<UrbanFacadeFamily, readonly string[]>;
+const CORNERS = Object.fromEntries(
+  CHICAGO_KIT_V2_FAMILIES.map((family) => [family, chicagoFamilyDefinition(family).corners]),
+) as unknown as Record<UrbanFacadeFamily, readonly string[]>;
+const ROOFS = Object.fromEntries(
+  CHICAGO_KIT_V2_FAMILIES.map((family) => [family, chicagoFamilyDefinition(family).roofs]),
+) as unknown as Record<UrbanFacadeFamily, readonly string[]>;
 
 const FAMILY_ERA: Record<UrbanFacadeFamily, ArchitecturalEra> = {
   "chicago-school-masonry": "chicago-school-1890-1930",
@@ -555,17 +516,9 @@ export function planChicagoKitV2(
       contextBuildingCount: contextSignatures.length,
       facadeFamilyCount: new Set(signatures.map((signature) => signature.family)).size,
       curtainWallSystemCount: new Set(signatures.map((signature) => signature.glassSystem).filter(Boolean)).size,
-      roofVariantCount: new Set(signatures.map((signature) => signature.roofVariant)).size,
-      cornerVariantCount: new Set(signatures.map((signature) => signature.cornerVariant)).size,
       groundFloorProgramFamilyCount: new Set(storefrontPrograms.map((program) => program.programFamily)).size,
       ...adjacency,
-      // Kit v2 adds a visible lobby, service bay, or shopfront module to the
-      // residual frontage that was intentionally quiet in the semantic fabric.
-      // This is visual activation only; it creates no repository entity.
-      activeGroundFloorPct: Math.max(fabric.morphology.activeGroundFloorPct, 82),
-      fultonActiveGroundFloorPct: Math.max(fabric.morphology.fultonActiveGroundFloorPct, 78),
       landmarkRatioPct: fabric.morphology.landmarkRatioPct,
-      blankContextFallbackCount: 0,
     },
   };
 }
@@ -607,5 +560,6 @@ export function chicagoKitV2VariantInventory() {
     corners: CORNERS[family],
     roofs: ROOFS[family],
     materialAgeVariants: 2,
+    canonicalDefinitionVersion: CHICAGO_KIT_V2_DEFINITION.version,
   }));
 }
