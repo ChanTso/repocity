@@ -1,0 +1,92 @@
+{
+  "version": "0.2.1",
+  "worldUnitMeters": 3,
+  "lod": {
+    "lod0MaxDistance": 52,
+    "lod1MaxDistance": 145,
+    "hysteresis": 7
+  },
+  "rhythmRecipes": [
+    { "primitive": "single-recess", "grouping": 1, "windowWidth": 0.58, "windowHeight": 0.54, "reveal": 0.09, "pier": 0.13, "band": 0.08, "offset": 0 },
+    { "primitive": "paired-oriel", "grouping": 2, "windowWidth": 0.72, "windowHeight": 0.62, "reveal": 0.13, "pier": 0.09, "band": 0.12, "offset": 0.08 },
+    { "primitive": "deep-reveal", "grouping": 3, "windowWidth": 0.82, "windowHeight": 0.7, "reveal": 0.06, "pier": 0.065, "band": 0.055, "offset": -0.07 }
+  ],
+  "baseRecipes": [
+    { "primitive": "arcade-opening", "heightScale": 1, "openingWidth": 0.72, "pierCadence": 1, "recess": 0.11, "canopyDepth": 0.42, "plinthHeight": 0.16 },
+    { "primitive": "recessed-lobby", "heightScale": 1.18, "openingWidth": 0.56, "pierCadence": 2, "recess": 0.23, "canopyDepth": 0.68, "plinthHeight": 0.3 }
+  ],
+  "cornerRecipes": [
+    { "primitive": "expressed-pier", "width": 0.3, "depth": 0.2, "projection": 0.08, "rotation": 0, "wrapGlass": 0.22, "fins": 1 },
+    { "primitive": "chamfer-wrap", "width": 0.5, "depth": 0.28, "projection": 0.16, "rotation": 0.785398, "wrapGlass": 0.5, "fins": 3 }
+  ],
+  "roofRecipes": [
+    { "primitive": "cornice-cap", "style": "cap", "heightScale": 0.045, "widthScale": 0.7, "depthScale": 0.66, "tiers": 1, "fins": 0, "offset": -0.08 },
+    { "primitive": "screen-house", "style": "house", "heightScale": 0.075, "widthScale": 0.54, "depthScale": 0.5, "tiers": 2, "fins": 0, "offset": 0.11 },
+    { "primitive": "stepped-crown", "style": "crown", "heightScale": 0.11, "widthScale": 0.42, "depthScale": 0.4, "tiers": 3, "fins": 3, "offset": 0 }
+  ],
+  "families": {
+    "chicago-school-masonry": {
+      "colors": ["#8b493b", "#c7b995", "#2d3639"],
+      "rhythms": ["paired-vertical-bays", "tripartite-oriel-bays", "deep-reveal-grid"],
+      "bases": ["stone-arcade", "terra-cotta-shopfront"],
+      "corners": ["expressed-corner-bay", "recessed-stone-corner"],
+      "roofs": ["heavy-cornice", "parapet-roof-house", "stepped-cornice"]
+    },
+    "miesian-grid": {
+      "colors": ["#29363a", "#263033", "#54777c"],
+      "rhythms": ["four-foot-steel-grid", "wide-structural-bays", "double-mullion-grid"],
+      "bases": ["transparent-plaza-lobby", "dark-stone-lobby"],
+      "corners": ["wrapped-glass-corner", "expressed-steel-corner"],
+      "roofs": ["restrained-mechanical-top", "recessed-screen", "flat-grid-cap"]
+    },
+    "blue-green-curtain-wall": {
+      "colors": ["#507a7d", "#a9a795", "#6da4a7"],
+      "rhythms": ["unitized-vision-spandrel", "offset-panel-grid", "corner-glass-grid"],
+      "bases": ["clear-corner-lobby", "stone-podium-lobby"],
+      "corners": ["clear-glass-corner", "recessed-panel-corner"],
+      "roofs": ["glass-screen-top", "offset-roof-house", "thin-metal-cap"]
+    },
+    "bronze-vertical-modern": {
+      "colors": ["#495052", "#5d4b3c", "#607b7b"],
+      "rhythms": ["close-bronze-fins", "wide-bronze-fins", "paired-river-fins"],
+      "bases": ["bronze-river-lobby", "granite-podium"],
+      "corners": ["bronze-fin-corner", "wrapped-river-corner"],
+      "roofs": ["bronze-fin-crown", "terraced-top", "recessed-mechanical"]
+    },
+    "fulton-brick-warehouse": {
+      "colors": ["#914a39", "#4d3731", "#334044"],
+      "rhythms": ["broad-punched-windows", "paired-loft-bays", "loading-bay-rhythm"],
+      "bases": ["adaptive-reuse-shops", "loading-trace-base"],
+      "corners": ["heavy-masonry-corner", "recessed-loading-corner"],
+      "roofs": ["warehouse-parapet", "sawtooth-trace", "glass-rooftop-addition"]
+    },
+    "narrow-storefront-row": {
+      "colors": ["#b28365", "#d0bd99", "#374348"],
+      "rhythms": ["two-bay-shop-house", "three-bay-commercial", "single-bay-infill"],
+      "bases": ["canvas-awning-shops", "recessed-retail-bays"],
+      "corners": ["chamfered-shop-corner", "expressed-party-wall"],
+      "roofs": ["party-wall-parapet", "small-cornice", "stepped-row-top"]
+    },
+    "art-deco-setback": {
+      "colors": ["#c8bfa7", "#5b554d", "#41555a"],
+      "rhythms": ["fluted-vertical-bays", "stepped-spandrel-bays", "recessed-pier-bays"],
+      "bases": ["granite-portal-base", "limestone-arcade"],
+      "corners": ["fluted-corner", "stepped-chamfer-corner"],
+      "roofs": ["deco-stepped-crown", "fluted-roof-house", "shouldered-cap"]
+    },
+    "civic-institutional": {
+      "colors": ["#c9bd9e", "#4a4640", "#506b70"],
+      "rhythms": ["monumental-bays", "paired-public-windows", "restrained-colonnade"],
+      "bases": ["monumental-public-entry", "formal-colonnade"],
+      "corners": ["monumental-corner-pier", "restrained-chamfer"],
+      "roofs": ["formal-cornice", "restrained-civic-crown", "setback-roof-house"]
+    },
+    "riverfront-terrace": {
+      "colors": ["#929e9b", "#514a40", "#648d90"],
+      "rhythms": ["terrace-unitized-grid", "river-corner-glass", "vertical-slab-bays"],
+      "bases": ["transparent-river-lobby", "terraced-podium"],
+      "corners": ["wrapped-terrace-corner", "bronze-river-corner"],
+      "roofs": ["terraced-crown", "tapered-screen", "bronze-slab-top"]
+    }
+  }
+}

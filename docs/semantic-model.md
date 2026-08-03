@@ -16,6 +16,8 @@ RepoCity uses a repository-semantic graph as its source of truth. The city is a 
 
 One semantic container can span multiple buildings when scale requires it. Selection therefore follows semantic ownership rather than assuming one building equals one file.
 
+Chicago Kit v2 adds an architectural wrapper without changing that hierarchy. Its family, era, facade, roof, corner, and material choices derive from zone and spatial conditions. Permuting component IDs or component display colors leaves those choices unchanged. Every core module still routes through an existing semantic building/component owner; context rings and street programs remain non-semantic and unselectable.
+
 The Semantic Lens presents the authoritative chain explicitly:
 
 ```text

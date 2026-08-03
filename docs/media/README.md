@@ -1,12 +1,12 @@
-# Public alpha media manifest
+# RepoCity v0.2 showcase media manifest
 
-The four product images are authentic RepoCity captures at a 1920×1080 browser viewport. The README hero was refreshed from the `v0.1.0-alpha.2` main baseline; the other three images remain from the `v0.1.0-alpha.1` release candidate. They contain no browser chrome, external game imagery, private repositories, personal information, or generated replacement scenery.
+The v0.2 package is captured directly from the running application at commit `75981ecfa5039de811ad3e57134b0b6b3ab423f5`. It contains no browser chrome, external game imagery, private repositories, personal information, AI-generated replacement scenery, or simulated post-production camera movement.
 
 | File | Purpose | Capture state | SHA-256 |
 | --- | --- | --- | --- |
-| `repocity-hero.png` | README hero | Flow stage 8, public-alpha camera, dusk, HUD hidden | `3cebb74c355ddede1ad885b02f918013a87aea345ec5d395867a0c4e883e89ee` |
-| `repocity-flow.png` | Evidence journey | Flow, repository pipeline, HUD visible | `d1fa3ada8645d0051db49a0673bb1f5b68bad6bc209f8cdeafa190fc47c42c1d` |
-| `repocity-inspector.png` | Semantic inspection | Explore, selected file inspector | `f1b31529ced689a32aae7f4ae8fce9bbeb3303aa1b3e749eb3da8aea0761d7fa` |
-| `repocity-street-detail.png` | Street detail | Explore, storefront camera, HUD hidden | `23cc5f24c1053e85d752f312c13b2cc66e5433b909962281e03e8e5b58994f0c` |
+| `repocity-v0.2-hero.png` | README hero | Flow, urban-composition camera, HUD hidden, 1920×1080 | `41ebfd318616d6160c7f2bb29ad6a4641c8d25b3bb88039fd0840615de3d4875` |
+| `repocity-v0.2-flow.gif` | Motion proof | Live Flow evidence plus independently moving ambient context, 960×540, 8 seconds | `a0586688f0904219ee8cad06e8fe8fa4cc8418e5b10a6f5344433a05431fc851` |
+| `repocity-v0.2-map.png` | Semantic proof | Map, selected component, multi-block labels, breadcrumb, inspector, 1920×1080 | `d48f78692dd4fff00e4d3f0fd8f1d85062a97dc4911c7294075b042c7ddd4c72` |
+| `repocity-v0.2-street.png` | Human-scale proof | Explore, Fulton street camera, HUD hidden, ambient pedestrians and vehicles, 1920×1080 | `bf94fd27e507c0370f910c44469a9a8dcb387e976677d728a6114f6334bb7688` |
 
-`repocity-social-preview.png` is a 1280×640 social-card layout derived from the authentic hero capture. It adds only a dark legibility treatment and release typography; it is not presented as an additional product view. Its SHA-256 is `94d7d6e37b3137e91a1660c834c2bc3224fd8a5fe299c2d83bcdce083f436a7e`, identical to `public/og.png`.
+`repocity-v0.2-social-preview.png` is a 1280×640, 299,792-byte social card derived from the authentic hero capture. It adds only a dark legibility treatment, the repository-owned RepoCity mark, and descriptive typography. Its SHA-256 is `87d7d02d6a26b2df7867cf33fbafad0948c638e5460a54c000e5316adb5e541f`, identical to `public/og.png`.

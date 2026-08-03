@@ -1,6 +1,6 @@
 # RepoCity v0.2 — Semantic Lens
 
-Status: review candidate. This document records the verified baseline, implementation contract, and local acceptance evidence for the first `v0.2 — Legible Living City` pull request. It does not describe a released version.
+Status: released in v0.2.0. This document preserves the verified baseline, implementation contract, and local acceptance evidence for Semantic Lens.
 
 ## Verified baseline
 

@@ -23,7 +23,7 @@ Sharp and its prebuilt libvips packages are development/build dependencies. When
 
 ## Original visual assets
 
-All committed files under `public/assets/city-kit-v1/` are deterministic works generated for RepoCity by `scripts/generate-city-kit.mjs`. They contain no marketplace assets, ripped game content, third-party logos, or copied landmarks. Their checksums and inventory are in [the city-kit manifest](docs/assets/city-kit-v1-manifest.md).
+All committed files under `public/assets/city-kit-v1/` and `public/assets/city-kit-v2/` are deterministic works generated for RepoCity by `scripts/generate-city-kit.mjs` and `scripts/generate-city-kit-v2.mjs`. They contain no marketplace assets, ripped game content, third-party logos, or copied landmarks. Their checksums and inventories are in [the v1 city-kit manifest](docs/assets/city-kit-v1-manifest.md) and [the v2 city-kit manifest](docs/assets/city-kit-v2-manifest.md).
 
 Screenshots in `docs/screenshots/` and `docs/media/` are captures of the RepoCity application. They must not contain external game screenshots, private repositories, personal information, or unlicensed artwork.
 

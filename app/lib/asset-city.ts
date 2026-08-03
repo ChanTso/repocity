@@ -1,5 +1,6 @@
 import type { UrbanFabricPlan } from "./urban-fabric";
 import type { VisualCityPlan } from "./visual-city";
+import { planChicagoKitV2 } from "./chicago-kit-v2";
 
 export const ASSET_CITY_VERSION = "4.3" as const;
 export const CITY_KIT_ROOT = "/assets/city-kit-v1" as const;
@@ -127,11 +128,13 @@ export type AssetReviewCameraId =
   | "river-bridge"
   | "glass-facade"
   | "urban-composition"
-  | "public-alpha-hero";
+  | "public-alpha-hero"
+  | "civic-anchor"
+  | "riverfront-tower";
 
 export interface AssetReviewCameraPreset {
   id: AssetReviewCameraId;
-  key: "1" | "2" | "3" | "4" | "5" | "6";
+  key: "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8";
   position: [number, number, number];
   target: [number, number, number];
   fov: number;
@@ -515,19 +518,70 @@ export function planAssetBackedHero(
 export function makeAssetReviewCameraPresets(
   plan: AssetBackedHeroPlan,
   visualCity: VisualCityPlan,
+  urbanFabric?: UrbanFabricPlan,
 ): readonly AssetReviewCameraPreset[] {
-  const masonry = plan.buildings.find((building) => building.node === "masonry-building") ?? plan.buildings[0]!;
-  const glass = plan.buildings.find((building) => building.node === "blue-unitized-tower") ?? plan.buildings[0]!;
-  const center = plan.buildings.reduce((value, building) => ({ x: value.x + building.x, z: value.z + building.z }), { x: 0, z: 0 });
-  center.x /= plan.buildings.length;
-  center.z /= plan.buildings.length;
   const bridge = plan.riverEdge.find((item) => item.node === "bridge-abutment")!;
+  const fallbackFulton = visualCity.hero.blocks.find((block) => block.role === "fulton-brick-market-a")?.block ?? visualCity.hero.blocks[0]!.block;
+  const fallbackLoop = visualCity.hero.blocks.find((block) => block.role === "loop-masonry-streetwall")?.block ?? visualCity.hero.blocks[0]!.block;
+  const fallbackGlass = visualCity.hero.blocks.find((block) => block.role === "modern-glass-corner")?.block ?? visualCity.hero.blocks[0]!.block;
+  const fallbackCivic = visualCity.hero.blocks.find((block) => block.role === "civic-podium-tower")?.block ?? visualCity.hero.blocks.at(-1)!.block;
+  const chicagoSignatures = urbanFabric ? planChicagoKitV2(urbanFabric, visualCity).signatures : [];
+  const envelope = (
+    family: UrbanFabricPlan["architecturalEnvelopes"][number]["facadeFamily"],
+    fallback: typeof fallbackFulton,
+    zone?: (typeof chicagoSignatures)[number]["characterZone"],
+  ) => {
+    const signature = chicagoSignatures.find((candidate) => candidate.family === family && (!zone || candidate.characterZone === zone));
+    return urbanFabric?.architecturalEnvelopes.find((candidate) => candidate.id === signature?.envelopeId) ?? fallback;
+  };
+  const fulton = envelope("fulton-brick-warehouse", fallbackFulton, "fulton-market");
+  const loop = envelope("chicago-school-masonry", fallbackLoop, "loop-core");
+  const glass = envelope("miesian-grid", fallbackGlass, "river-north");
+  const civic = envelope("civic-institutional", fallbackCivic, "civic-anchor");
+  const riverfront = envelope("riverfront-terrace", fallbackGlass, "river-north");
+  const streetView = (
+    anchor: typeof fulton,
+    distance: number,
+    tangentOffset: number,
+    cameraY: number,
+    targetY: number,
+  ): { position: [number, number, number]; target: [number, number, number] } => {
+    const edge = "primaryEdge" in anchor ? anchor.primaryEdge : "south";
+    const normal = edge === "north" ? [0, -1] : edge === "south" ? [0, 1] : edge === "west" ? [-1, 0] : [1, 0];
+    const tangent = [-normal[1], normal[0]];
+    const extent = normal[0] === 0 ? anchor.depth / 2 : anchor.width / 2;
+    return {
+      position: [
+        anchor.x + normal[0] * (extent + distance) + tangent[0] * tangentOffset,
+        cameraY,
+        anchor.z + normal[1] * (extent + distance) + tangent[1] * tangentOffset,
+      ],
+      target: [anchor.x, targetY, anchor.z],
+    };
+  };
+  const loopView = {
+    position: [loop.x - loop.width * 0.88, 2.35, -31] as [number, number, number],
+    target: [loop.x - loop.width * 0.88, 2.45, 30] as [number, number, number],
+  };
+  const fultonView = {
+    position: [fulton.x + fulton.width * 1.82, 2.15, 30] as [number, number, number],
+    target: [fulton.x + fulton.width * 1.82, 2.3, -30] as [number, number, number],
+  };
+  // Acceptance cameras prove architecture from the public realm. They stay at
+  // pedestrian or second-floor height so storefronts, lobbies, facade depth,
+  // traffic, and the street wall remain legible instead of collapsing into an
+  // elevated massing diagram.
+  const glassView = streetView(glass, 5.2, -glass.width * 0.68, 2.6, Math.min(3.1, "height" in glass ? glass.height * 0.28 : 2.8));
+  const civicView = streetView(civic, 25, -20, 18, Math.min(5.8, "height" in civic ? civic.height * 0.36 : 4.8));
+  const riverfrontView = streetView(riverfront, 24, -17, 17, Math.min(7, "height" in riverfront ? riverfront.height * 0.4 : 5.5));
   return [
-    { id: "street-corner", key: "1", position: [masonry.x + 4.8, 3.3, masonry.z + 8.5], target: [masonry.x - masonry.width * 0.18, 1.5, masonry.z + masonry.depth * 0.34], fov: 42 },
-    { id: "storefront-street", key: "2", position: [masonry.x + 4.2, 2.75, masonry.z + 8.2], target: [masonry.x - masonry.width * 0.18, 1.25, masonry.z + masonry.depth * 0.34], fov: 42 },
-    { id: "river-bridge", key: "3", position: [visualCity.river.minX - 1.55, 5.2, bridge.z + 17.2], target: [(visualCity.river.minX + visualCity.river.maxX) / 2, 0.65, bridge.z - 0.8], fov: 42 },
-    { id: "glass-facade", key: "4", position: [glass.x + 16, 5.5, glass.z + 10], target: [glass.x, glass.height * 0.4, glass.z], fov: 42 },
-    { id: "urban-composition", key: "5", position: [center.x - 15.5, 9, center.z + 14.5], target: [center.x, 3.1, center.z], fov: 42 },
-    { id: "public-alpha-hero", key: "6", position: [visualCity.river.maxX + 55, 30, bridge.z + 35], target: [center.x + 12, 2.8, center.z + 8], fov: 42 },
+    { id: "street-corner", key: "1", ...loopView, fov: 48 },
+    { id: "storefront-street", key: "2", ...fultonView, fov: 48 },
+    { id: "river-bridge", key: "3", position: [visualCity.river.maxX + 13, 8.2, bridge.z + 22], target: [riverfront.x + 3.8, 3.5, bridge.z - 1.8], fov: 46 },
+    { id: "glass-facade", key: "4", ...glassView, fov: 46 },
+    { id: "urban-composition", key: "5", position: [visualCity.river.maxX + 53, 24, bridge.z + 49], target: [-8, 4.5, bridge.z + 4], fov: 44 },
+    { id: "public-alpha-hero", key: "6", position: [-145, 17, bridge.z - 2], target: [-12, 6.2, bridge.z + 4], fov: 47 },
+    { id: "civic-anchor", key: "7", ...civicView, fov: 46 },
+    { id: "riverfront-tower", key: "8", ...riverfrontView, fov: 46 },
   ] as const;
 }

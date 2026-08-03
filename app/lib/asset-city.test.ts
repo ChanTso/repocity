@@ -124,11 +124,11 @@ describe("V4.3 asset-backed Chicago proof", () => {
     expect(new Set(Object.values(HERO_GLASS_SYSTEMS).map((system) => system.roughness)).size).toBe(3);
   });
 
-  it("locks six deterministic perspective review transforms", () => {
+  it("locks eight deterministic perspective review transforms", () => {
     const first = fixture();
     const reordered = fixture(true);
-    const cameras = makeAssetReviewCameraPresets(first.assetHero, first.visualCity);
-    expect(cameras).toEqual(makeAssetReviewCameraPresets(reordered.assetHero, reordered.visualCity));
+    const cameras = makeAssetReviewCameraPresets(first.assetHero, first.visualCity, first.urbanFabric);
+    expect(cameras).toEqual(makeAssetReviewCameraPresets(reordered.assetHero, reordered.visualCity, reordered.urbanFabric));
     expect(cameras.map((camera) => camera.id)).toEqual([
       "street-corner",
       "storefront-street",
@@ -136,6 +136,8 @@ describe("V4.3 asset-backed Chicago proof", () => {
       "glass-facade",
       "urban-composition",
       "public-alpha-hero",
+      "civic-anchor",
+      "riverfront-tower",
     ]);
     for (const camera of cameras) {
       expect(camera.fov).toBeGreaterThanOrEqual(30);

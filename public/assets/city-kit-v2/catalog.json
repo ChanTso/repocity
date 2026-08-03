@@ -1,0 +1,559 @@
+{
+  "version": "0.2.1",
+  "deterministic": true,
+  "license": "Apache-2.0",
+  "classification": "NON_SEMANTIC_URBAN_CONTEXT",
+  "canonicalDefinition": "app/lib/chicago-kit-v2-definition.json",
+  "generatedFrom": "scripts/generate-city-kit-v2.mjs",
+  "assets": [
+    {
+      "family": "chicago-school-masonry",
+      "file": "chicago-school-masonry.glb",
+      "bytes": 218972,
+      "triangles": 1428,
+      "sha256": "b2dc3f69b2838c8e0ac37c774c69c0c4bd034addd170b1f2ed0a05e4faef58aa",
+      "definitionFingerprint": "eb9f16ba",
+      "rootMap": {
+        "bases": {
+          "stone-arcade": "base-stone-arcade",
+          "terra-cotta-shopfront": "base-terra-cotta-shopfront"
+        },
+        "rhythms": {
+          "paired-vertical-bays": "middle-paired-vertical-bays",
+          "tripartite-oriel-bays": "middle-tripartite-oriel-bays",
+          "deep-reveal-grid": "middle-deep-reveal-grid"
+        },
+        "corners": {
+          "expressed-corner-bay": "corner-expressed-corner-bay",
+          "recessed-stone-corner": "corner-recessed-stone-corner"
+        },
+        "roofs": {
+          "heavy-cornice": "roof-heavy-cornice",
+          "parapet-roof-house": "roof-parapet-roof-house",
+          "stepped-cornice": "roof-stepped-cornice"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-stone-arcade",
+        "base-terra-cotta-shopfront",
+        "middle-paired-vertical-bays",
+        "middle-tripartite-oriel-bays",
+        "middle-deep-reveal-grid",
+        "corner-expressed-corner-bay",
+        "corner-recessed-stone-corner",
+        "roof-heavy-cornice",
+        "roof-parapet-roof-house",
+        "roof-stepped-cornice",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:paired-vertical-bays": "3e04c08e",
+        "rhythm:tripartite-oriel-bays": "34e056ac",
+        "rhythm:deep-reveal-grid": "c83fa9b7",
+        "base:stone-arcade": "7c306129",
+        "base:terra-cotta-shopfront": "3e04c12a",
+        "corner:expressed-corner-bay": "91a481d8",
+        "corner:recessed-stone-corner": "3ef0f1db",
+        "roof:heavy-cornice": "d74a9430",
+        "roof:parapet-roof-house": "f21b214b",
+        "roof:stepped-cornice": "d14a2386"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "miesian-grid",
+      "file": "miesian-grid.glb",
+      "bytes": 218932,
+      "triangles": 1428,
+      "sha256": "90cfb21db9d3294b4173fcb29a91127dad7d7d25e060512627a9536b31fef953",
+      "definitionFingerprint": "b2108231",
+      "rootMap": {
+        "bases": {
+          "transparent-plaza-lobby": "base-transparent-plaza-lobby",
+          "dark-stone-lobby": "base-dark-stone-lobby"
+        },
+        "rhythms": {
+          "four-foot-steel-grid": "middle-four-foot-steel-grid",
+          "wide-structural-bays": "middle-wide-structural-bays",
+          "double-mullion-grid": "middle-double-mullion-grid"
+        },
+        "corners": {
+          "wrapped-glass-corner": "corner-wrapped-glass-corner",
+          "expressed-steel-corner": "corner-expressed-steel-corner"
+        },
+        "roofs": {
+          "restrained-mechanical-top": "roof-restrained-mechanical-top",
+          "recessed-screen": "roof-recessed-screen",
+          "flat-grid-cap": "roof-flat-grid-cap"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-transparent-plaza-lobby",
+        "base-dark-stone-lobby",
+        "middle-four-foot-steel-grid",
+        "middle-wide-structural-bays",
+        "middle-double-mullion-grid",
+        "corner-wrapped-glass-corner",
+        "corner-expressed-steel-corner",
+        "roof-restrained-mechanical-top",
+        "roof-recessed-screen",
+        "roof-flat-grid-cap",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:four-foot-steel-grid": "b95e5d4a",
+        "rhythm:wide-structural-bays": "02decc50",
+        "rhythm:double-mullion-grid": "63139af3",
+        "base:transparent-plaza-lobby": "c3abad2d",
+        "base:dark-stone-lobby": "bad8486e",
+        "corner:wrapped-glass-corner": "01fe3994",
+        "corner:expressed-steel-corner": "9095c117",
+        "roof:restrained-mechanical-top": "5cc8cbbc",
+        "roof:recessed-screen": "6afd651f",
+        "roof:flat-grid-cap": "1c31abea"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "blue-green-curtain-wall",
+      "file": "blue-green-curtain-wall.glb",
+      "bytes": 218976,
+      "triangles": 1428,
+      "sha256": "44c35459e1350f5581c79c331b2d3acf30f74ed7ee031fe5ddd466600412daf2",
+      "definitionFingerprint": "a84b3e92",
+      "rootMap": {
+        "bases": {
+          "clear-corner-lobby": "base-clear-corner-lobby",
+          "stone-podium-lobby": "base-stone-podium-lobby"
+        },
+        "rhythms": {
+          "unitized-vision-spandrel": "middle-unitized-vision-spandrel",
+          "offset-panel-grid": "middle-offset-panel-grid",
+          "corner-glass-grid": "middle-corner-glass-grid"
+        },
+        "corners": {
+          "clear-glass-corner": "corner-clear-glass-corner",
+          "recessed-panel-corner": "corner-recessed-panel-corner"
+        },
+        "roofs": {
+          "glass-screen-top": "roof-glass-screen-top",
+          "offset-roof-house": "roof-offset-roof-house",
+          "thin-metal-cap": "roof-thin-metal-cap"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-clear-corner-lobby",
+        "base-stone-podium-lobby",
+        "middle-unitized-vision-spandrel",
+        "middle-offset-panel-grid",
+        "middle-corner-glass-grid",
+        "corner-clear-glass-corner",
+        "corner-recessed-panel-corner",
+        "roof-glass-screen-top",
+        "roof-offset-roof-house",
+        "roof-thin-metal-cap",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:unitized-vision-spandrel": "47881593",
+        "rhythm:offset-panel-grid": "741a9fb9",
+        "rhythm:corner-glass-grid": "34515fec",
+        "base:clear-corner-lobby": "9eec8dee",
+        "base:stone-podium-lobby": "14e7e1c9",
+        "corner:clear-glass-corner": "d238d39b",
+        "corner:recessed-panel-corner": "4518f072",
+        "roof:glass-screen-top": "08437249",
+        "roof:offset-roof-house": "c6b12352",
+        "roof:thin-metal-cap": "b833193d"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "bronze-vertical-modern",
+      "file": "bronze-vertical-modern.glb",
+      "bytes": 218964,
+      "triangles": 1428,
+      "sha256": "80bb9f5161e27778f49c4c53b33a754e11099ff32a6a0388efcdec6128a498d7",
+      "definitionFingerprint": "ec8e3727",
+      "rootMap": {
+        "bases": {
+          "bronze-river-lobby": "base-bronze-river-lobby",
+          "granite-podium": "base-granite-podium"
+        },
+        "rhythms": {
+          "close-bronze-fins": "middle-close-bronze-fins",
+          "wide-bronze-fins": "middle-wide-bronze-fins",
+          "paired-river-fins": "middle-paired-river-fins"
+        },
+        "corners": {
+          "bronze-fin-corner": "corner-bronze-fin-corner",
+          "wrapped-river-corner": "corner-wrapped-river-corner"
+        },
+        "roofs": {
+          "bronze-fin-crown": "roof-bronze-fin-crown",
+          "terraced-top": "roof-terraced-top",
+          "recessed-mechanical": "roof-recessed-mechanical"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-bronze-river-lobby",
+        "base-granite-podium",
+        "middle-close-bronze-fins",
+        "middle-wide-bronze-fins",
+        "middle-paired-river-fins",
+        "corner-bronze-fin-corner",
+        "corner-wrapped-river-corner",
+        "roof-bronze-fin-crown",
+        "roof-terraced-top",
+        "roof-recessed-mechanical",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:close-bronze-fins": "a7d3fb70",
+        "rhythm:wide-bronze-fins": "b67df6d2",
+        "rhythm:paired-river-fins": "7d83f209",
+        "base:bronze-river-lobby": "826107af",
+        "base:granite-podium": "dab66e60",
+        "corner:bronze-fin-corner": "35c6e4e2",
+        "corner:wrapped-river-corner": "d779072d",
+        "roof:bronze-fin-crown": "68974f7a",
+        "roof:terraced-top": "76ac79c5",
+        "roof:recessed-mechanical": "62282948"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "fulton-brick-warehouse",
+      "file": "fulton-brick-warehouse.glb",
+      "bytes": 218988,
+      "triangles": 1428,
+      "sha256": "a51cf55537ffd27b7cb390a4e7fae83dda8de0fb97565dc4bc63ced709362766",
+      "definitionFingerprint": "aa17c898",
+      "rootMap": {
+        "bases": {
+          "adaptive-reuse-shops": "base-adaptive-reuse-shops",
+          "loading-trace-base": "base-loading-trace-base"
+        },
+        "rhythms": {
+          "broad-punched-windows": "middle-broad-punched-windows",
+          "paired-loft-bays": "middle-paired-loft-bays",
+          "loading-bay-rhythm": "middle-loading-bay-rhythm"
+        },
+        "corners": {
+          "heavy-masonry-corner": "corner-heavy-masonry-corner",
+          "recessed-loading-corner": "corner-recessed-loading-corner"
+        },
+        "roofs": {
+          "warehouse-parapet": "roof-warehouse-parapet",
+          "sawtooth-trace": "roof-sawtooth-trace",
+          "glass-rooftop-addition": "roof-glass-rooftop-addition"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-adaptive-reuse-shops",
+        "base-loading-trace-base",
+        "middle-broad-punched-windows",
+        "middle-paired-loft-bays",
+        "middle-loading-bay-rhythm",
+        "corner-heavy-masonry-corner",
+        "corner-recessed-loading-corner",
+        "roof-warehouse-parapet",
+        "roof-sawtooth-trace",
+        "roof-glass-rooftop-addition",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:broad-punched-windows": "c4686445",
+        "rhythm:paired-loft-bays": "b4e47aef",
+        "rhythm:loading-bay-rhythm": "65d95286",
+        "base:adaptive-reuse-shops": "de8334fc",
+        "base:loading-trace-base": "84cd78cf",
+        "corner:heavy-masonry-corner": "dea45615",
+        "corner:recessed-loading-corner": "66a4706c",
+        "roof:warehouse-parapet": "bf806fdb",
+        "roof:sawtooth-trace": "45decbc4",
+        "roof:glass-rooftop-addition": "8f7a04d7"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "narrow-storefront-row",
+      "file": "narrow-storefront-row.glb",
+      "bytes": 218968,
+      "triangles": 1428,
+      "sha256": "4642b21d3aee52e64f1df88938d80ed46bd91aff235318c3dfb324fdf19a8d3b",
+      "definitionFingerprint": "63e5b882",
+      "rootMap": {
+        "bases": {
+          "canvas-awning-shops": "base-canvas-awning-shops",
+          "recessed-retail-bays": "base-recessed-retail-bays"
+        },
+        "rhythms": {
+          "two-bay-shop-house": "middle-two-bay-shop-house",
+          "three-bay-commercial": "middle-three-bay-commercial",
+          "single-bay-infill": "middle-single-bay-infill"
+        },
+        "corners": {
+          "chamfered-shop-corner": "corner-chamfered-shop-corner",
+          "expressed-party-wall": "corner-expressed-party-wall"
+        },
+        "roofs": {
+          "party-wall-parapet": "roof-party-wall-parapet",
+          "small-cornice": "roof-small-cornice",
+          "stepped-row-top": "roof-stepped-row-top"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-canvas-awning-shops",
+        "base-recessed-retail-bays",
+        "middle-two-bay-shop-house",
+        "middle-three-bay-commercial",
+        "middle-single-bay-infill",
+        "corner-chamfered-shop-corner",
+        "corner-expressed-party-wall",
+        "roof-party-wall-parapet",
+        "roof-small-cornice",
+        "roof-stepped-row-top",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:two-bay-shop-house": "1e4850b8",
+        "rhythm:three-bay-commercial": "4a9ae7ea",
+        "rhythm:single-bay-infill": "2b05b341",
+        "base:canvas-awning-shops": "381d4ce7",
+        "base:recessed-retail-bays": "ca920318",
+        "corner:chamfered-shop-corner": "b0f35aca",
+        "corner:expressed-party-wall": "d6663e25",
+        "roof:party-wall-parapet": "6c9f3d32",
+        "roof:small-cornice": "4594eefd",
+        "roof:stepped-row-top": "d7139d90"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "art-deco-setback",
+      "file": "art-deco-setback.glb",
+      "bytes": 218936,
+      "triangles": 1428,
+      "sha256": "bbe95fb9fa90b109e7be555a99d0d61c16464fb92728d99338ca348016438111",
+      "definitionFingerprint": "156e667b",
+      "rootMap": {
+        "bases": {
+          "granite-portal-base": "base-granite-portal-base",
+          "limestone-arcade": "base-limestone-arcade"
+        },
+        "rhythms": {
+          "fluted-vertical-bays": "middle-fluted-vertical-bays",
+          "stepped-spandrel-bays": "middle-stepped-spandrel-bays",
+          "recessed-pier-bays": "middle-recessed-pier-bays"
+        },
+        "corners": {
+          "fluted-corner": "corner-fluted-corner",
+          "stepped-chamfer-corner": "corner-stepped-chamfer-corner"
+        },
+        "roofs": {
+          "deco-stepped-crown": "roof-deco-stepped-crown",
+          "fluted-roof-house": "roof-fluted-roof-house",
+          "shouldered-cap": "roof-shouldered-cap"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-granite-portal-base",
+        "base-limestone-arcade",
+        "middle-fluted-vertical-bays",
+        "middle-stepped-spandrel-bays",
+        "middle-recessed-pier-bays",
+        "corner-fluted-corner",
+        "corner-stepped-chamfer-corner",
+        "roof-deco-stepped-crown",
+        "roof-fluted-roof-house",
+        "roof-shouldered-cap",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:fluted-vertical-bays": "d911e3b0",
+        "rhythm:stepped-spandrel-bays": "9885c392",
+        "rhythm:recessed-pier-bays": "693a4fc9",
+        "base:granite-portal-base": "0e71a7ef",
+        "base:limestone-arcade": "dab938a0",
+        "corner:fluted-corner": "c52c1522",
+        "corner:stepped-chamfer-corner": "65fe36ed",
+        "roof:deco-stepped-crown": "a420ee3a",
+        "roof:fluted-roof-house": "d97b6e05",
+        "roof:shouldered-cap": "03618a88"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "civic-institutional",
+      "file": "civic-institutional.glb",
+      "bytes": 218968,
+      "triangles": 1428,
+      "sha256": "3e950196505f800510c6e82530b22fd49b838cfcb0de95dfaf855e0f0276562c",
+      "definitionFingerprint": "b68d9a1a",
+      "rootMap": {
+        "bases": {
+          "monumental-public-entry": "base-monumental-public-entry",
+          "formal-colonnade": "base-formal-colonnade"
+        },
+        "rhythms": {
+          "monumental-bays": "middle-monumental-bays",
+          "paired-public-windows": "middle-paired-public-windows",
+          "restrained-colonnade": "middle-restrained-colonnade"
+        },
+        "corners": {
+          "monumental-corner-pier": "corner-monumental-corner-pier",
+          "restrained-chamfer": "corner-restrained-chamfer"
+        },
+        "roofs": {
+          "formal-cornice": "roof-formal-cornice",
+          "restrained-civic-crown": "roof-restrained-civic-crown",
+          "setback-roof-house": "roof-setback-roof-house"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-monumental-public-entry",
+        "base-formal-colonnade",
+        "middle-monumental-bays",
+        "middle-paired-public-windows",
+        "middle-restrained-colonnade",
+        "corner-monumental-corner-pier",
+        "corner-restrained-chamfer",
+        "roof-formal-cornice",
+        "roof-restrained-civic-crown",
+        "roof-setback-roof-house",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:monumental-bays": "78920a4b",
+        "rhythm:paired-public-windows": "fe50c5e1",
+        "rhythm:restrained-colonnade": "7bd7d234",
+        "base:monumental-public-entry": "ab43a5f6",
+        "base:formal-colonnade": "1d989fb1",
+        "corner:monumental-corner-pier": "a8ee6ef3",
+        "corner:restrained-chamfer": "debe0a3a",
+        "roof:formal-cornice": "52af9311",
+        "roof:restrained-civic-crown": "3d6f8a7a",
+        "roof:setback-roof-house": "f7983355"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    },
+    {
+      "family": "riverfront-terrace",
+      "file": "riverfront-terrace.glb",
+      "bytes": 218948,
+      "triangles": 1428,
+      "sha256": "2b8e5fac651121009519372a1a742f10082bf0428131f92838bf76d09d76670e",
+      "definitionFingerprint": "d19603e1",
+      "rootMap": {
+        "bases": {
+          "transparent-river-lobby": "base-transparent-river-lobby",
+          "terraced-podium": "base-terraced-podium"
+        },
+        "rhythms": {
+          "terrace-unitized-grid": "middle-terrace-unitized-grid",
+          "river-corner-glass": "middle-river-corner-glass",
+          "vertical-slab-bays": "middle-vertical-slab-bays"
+        },
+        "corners": {
+          "wrapped-terrace-corner": "corner-wrapped-terrace-corner",
+          "bronze-river-corner": "corner-bronze-river-corner"
+        },
+        "roofs": {
+          "terraced-crown": "roof-terraced-crown",
+          "tapered-screen": "roof-tapered-screen",
+          "bronze-slab-top": "roof-bronze-slab-top"
+        },
+        "exposure": {
+          "exposedEnd": "end-wall-exposed",
+          "partyWall": "end-wall-party",
+          "rearService": "rear-service"
+        }
+      },
+      "roots": [
+        "base-transparent-river-lobby",
+        "base-terraced-podium",
+        "middle-terrace-unitized-grid",
+        "middle-river-corner-glass",
+        "middle-vertical-slab-bays",
+        "corner-wrapped-terrace-corner",
+        "corner-bronze-river-corner",
+        "roof-terraced-crown",
+        "roof-tapered-screen",
+        "roof-bronze-slab-top",
+        "end-wall-exposed",
+        "end-wall-party",
+        "rear-service"
+      ],
+      "variantFingerprints": {
+        "rhythm:terrace-unitized-grid": "7f1af43d",
+        "rhythm:river-corner-glass": "a5615cd7",
+        "rhythm:vertical-slab-bays": "9b39d66e",
+        "base:transparent-river-lobby": "b9b56664",
+        "base:terraced-podium": "24aff277",
+        "corner:wrapped-terrace-corner": "25d1e58d",
+        "corner:bronze-river-corner": "6dbc8af4",
+        "roof:terraced-crown": "7cbc9e83",
+        "roof:tapered-screen": "9549ca0c",
+        "roof:bronze-slab-top": "890205ef"
+      },
+      "usage": "tooling-reference-runtime-procedural-parity"
+    }
+  ]
+}
